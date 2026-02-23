@@ -111,6 +111,10 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
   for (const actor of config.actors) {
     usageCount[actor] = 0;
   }
+  const pmCount = {};
+  for (const actor of config.actors) {
+    pmCount[actor] = 0;
+  }
 
   // Pre-calculate total eligible slots per actor for fairness tie-breaking.
   // Actors with fewer opportunities get priority when usage counts are tied.
@@ -132,6 +136,13 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
           const eapproved = scenarioActors[escenario] || [];
           for (const actor of eapproved) {
             if (isAvailableForShift(eda[actor], eshift)) {
+              const ec = config.actorConstraints?.[actor];
+              if (ec?.allowedDays?.length > 0) {
+                const [ey, em, ed] = edate.split('-').map(Number);
+                const edow = new Date(ey, em - 1, ed).getDay();
+                const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+                if (!ec.allowedDays.includes(dayNames[edow])) continue;
+              }
               eligibleCount[actor]++;
             }
           }
@@ -206,6 +217,19 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
             if (hasConflict(actor, scenario, shift, weekAssignments, conflicts)) {
               return false;
             }
+            // Actor constraints: day-of-week hard filter
+            const ac = config.actorConstraints?.[actor];
+            if (ac?.allowedDays?.length > 0) {
+              const [dy, dm, dd] = date.split('-').map(Number);
+              const adow = new Date(dy, dm - 1, dd).getDay();
+              const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+              if (!ac.allowedDays.includes(dayNames[adow])) return false;
+            }
+            // PM ratio cap
+            if (shift === "PM" && ac?.maxPMRatio != null) {
+              if (ac.maxPMRatio === 0) return false;
+              if (usageCount[actor] > 0 && pmCount[actor] / usageCount[actor] >= ac.maxPMRatio) return false;
+            }
             return true;
           });
 
@@ -221,6 +245,11 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
           candidates.sort((a, b) => {
             const usageDiff = usageCount[a] - usageCount[b];
             if (usageDiff !== 0) return usageDiff;
+            if (shift === "PM") {
+              const aPreferAM = config.actorConstraints?.[a]?.preferAM ? 1 : 0;
+              const bPreferAM = config.actorConstraints?.[b]?.preferAM ? 1 : 0;
+              if (aPreferAM !== bPreferAM) return aPreferAM - bPreferAM;
+            }
             return eligibleCount[a] - eligibleCount[b];
           });
 
@@ -228,6 +257,7 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
           slotResult[shift][scenario] = chosen;
           usedInShiftSlot.add(chosen);
           usageCount[chosen]++;
+          if (shift === "PM") pmCount[chosen]++;
 
           // Track in week-level assignments for cross-slot conflict checking
           if (!weekAssignments[shift][chosen]) {

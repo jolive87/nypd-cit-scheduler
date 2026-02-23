@@ -30,6 +30,11 @@ export const DEFAULT_CONFIG = {
   defaultDays: { "slot1":"Tuesday", "slot2":"Wednesday", "slot3":"Thursday" },
   conflicts: [{ actor_cannot_play:["Jumper","Depression"], scope:"same_shift" }],
   shiftTimes: { AM:"Noon", PM:"8 PM" },
+  actorConstraints: {
+    "Chris": { allowedDays: ["Thursday"], maxPMRatio: 0 },
+    "Doc": { preferAM: true, maxPMRatio: 0.3 },
+    "Decatur": { preferAM: true, maxPMRatio: 0.3 },
+  },
 };
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
@@ -68,6 +73,8 @@ export const T = {
   amberSoft: "#D4A05415",
   purple: "#B48EBF",
   purpleSoft: "#B48EBF15",
+  sunGold: "#C48A2A",
+  nightIndigo: "#4A3B6B",
 };
 
 export const slotColors = { slot1: T.coral, slot2: T.gold, slot3: T.mint };

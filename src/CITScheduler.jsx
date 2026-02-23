@@ -382,7 +382,7 @@ function SettingsPanel({ config, onSave, onClose, showToast }) {
     e.target.value = '';
   };
 
-  const tabs = [{ key: "actors", icon: "👤", label: "Actors" }, { key: "scenarios", icon: "🎭", label: "Scenarios" }, { key: "days", icon: "📅", label: "Day Setup" }, { key: "rules", icon: "⚠️", label: "Rules" }, { key: "data", icon: "💾", label: "Data" }];
+  const tabs = [{ key: "actors", icon: "👤", label: "Actors" }, { key: "scenarios", icon: "🎭", label: "Scenarios" }, { key: "days", icon: "📅", label: "Day Setup" }, { key: "rules", icon: "⚠️", label: "Rules" }, { key: "constraints", icon: "🔒", label: "Constraints" }, { key: "data", icon: "💾", label: "Data" }];
 
   return <Overlay onClose={onClose}><Card style={{ padding: 0, borderRadius: "18px" }}>
     <div style={{ padding: "24px 24px 16px", borderBottom: `1px solid ${T.border}`, background: T.bgRaised, borderRadius: "18px 18px 0 0" }}>
@@ -397,6 +397,64 @@ function SettingsPanel({ config, onSave, onClose, showToast }) {
       {tab === "days" && <div><p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Assign scenarios to each training slot.</p>{SLOT_KEYS.map(sk => { const assigned = cfg.slotScenarios[sk] || []; const cl = slotColors[sk]; return <Card key={sk} style={{ marginBottom: "10px" }} accent={cl}><div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}><SlotBar slotKey={sk} /><span style={{ fontWeight: "700", fontSize: "16px", color: T.text }}>{cfg.slotNames[sk]}</span><Badge type="info">Default: {cfg.defaultDays[sk]}</Badge></div><div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>{allSc.map(sc => { const active = assigned.includes(sc); const otherSlot = SLOT_KEYS.find(s => s !== sk && (cfg.slotScenarios[s] || []).includes(sc)); return <Chip key={sc} active={active} color={cl} onClick={() => toggleSlotSc(sk, sc)} dimmed={!!otherSlot && !active}>{cfg.scenarioIcons[sc] || "🎭"} {sc}{otherSlot && !active ? ` (${cfg.slotNames[otherSlot]})` : ""}</Chip> })}</div></Card> })}</div>}
 
       {tab === "rules" && <div><p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Same actor can't play both scenarios in the same shift.</p>{(cfg.conflicts || []).map((rule, i) => <Card key={i} style={{ marginBottom: "8px", padding: "14px" }}><div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}><span style={{ fontSize: "13px", fontWeight: "600", color: T.text }}>Can't play</span><StyledSelect value={rule.actor_cannot_play[0]} onChange={e => { u(c => { c.conflicts[i].actor_cannot_play[0] = e.target.value }) }}><option value="">—</option>{allSc.map(s => <option key={s}>{s}</option>)}</StyledSelect><span style={{ color: T.textMuted }}>+</span><StyledSelect value={rule.actor_cannot_play[1]} onChange={e => { u(c => { c.conflicts[i].actor_cannot_play[1] = e.target.value }) }}><option value="">—</option>{allSc.map(s => <option key={s}>{s}</option>)}</StyledSelect><Btn variant="ghost" onClick={() => { u(c => { c.conflicts.splice(i, 1) }) }} style={{ color: T.red }}>×</Btn></div></Card>)}<Btn variant="secondary" onClick={() => { u(c => { c.conflicts = [...(c.conflicts || []), { actor_cannot_play: ["", ""], scope: "same_shift" }] }) }}>+ Add Rule</Btn></div>}
+
+      {tab === "constraints" && <div>
+        <p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Scheduling constraints per actor. Day restrictions, AM preference, and PM cap.</p>
+        {cfg.actors.map(actor => {
+          const ac = cfg.actorConstraints?.[actor] || {};
+          const weekdays = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+          const effectiveDays = !ac.allowedDays?.length ? weekdays : ac.allowedDays;
+          const cl = cfg.actorColors[actor] || T.accent;
+          return <Card key={actor} style={{ marginBottom: "10px", padding: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+              <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: `${cl}20`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700", fontSize: "14px", color: cl }}>{actor[0]}</div>
+              <span style={{ fontWeight: "700", fontSize: "14px" }}>{actor}</span>
+            </div>
+            <div style={{ marginBottom: "10px" }}>
+              <div style={{ fontSize: "11px", fontWeight: "700", color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>Allowed Days {!ac.allowedDays?.length ? "(all)" : ""}</div>
+              <div style={{ display: "flex", gap: "4px" }}>
+                {weekdays.map(day => {
+                  const isOn = effectiveDays.includes(day);
+                  return <button key={day} onClick={() => {
+                    u(c => {
+                      if (!c.actorConstraints) c.actorConstraints = {};
+                      if (!c.actorConstraints[actor]) c.actorConstraints[actor] = {};
+                      const cur = c.actorConstraints[actor].allowedDays;
+                      const eff = !cur?.length ? weekdays : cur;
+                      const next = eff.includes(day) ? eff.filter(d => d !== day) : [...eff, day];
+                      c.actorConstraints[actor].allowedDays = next.length === 5 ? [] : next;
+                    });
+                  }} style={{ ...btnBase, flex: "1 1 0", padding: "6px 4px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: isOn ? `${cl}18` : T.bgRaised, border: `1.5px solid ${isOn ? cl : T.border}`, color: isOn ? cl : T.textFaint, minHeight: "36px" }}>{day.slice(0,3)}</button>;
+                })}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+              <div>
+                <div style={{ fontSize: "13px", fontWeight: "600", color: T.text }}>Prefers AM</div>
+                <div style={{ fontSize: "11px", color: T.textMuted }}>Gets PM only when needed</div>
+              </div>
+              <button onClick={() => u(c => {
+                if (!c.actorConstraints) c.actorConstraints = {};
+                if (!c.actorConstraints[actor]) c.actorConstraints[actor] = {};
+                c.actorConstraints[actor].preferAM = !c.actorConstraints[actor].preferAM;
+              })} style={{ ...btnBase, padding: "8px 16px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", background: ac.preferAM ? `${T.gold}20` : T.bgRaised, border: `1.5px solid ${ac.preferAM ? T.gold : T.border}`, color: ac.preferAM ? T.gold : T.textMuted, minHeight: "36px" }}>{ac.preferAM ? "☀️ Yes" : "—"}</button>
+            </div>
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: T.text, marginBottom: "4px" }}>
+                <span style={{ fontWeight: "600" }}>PM Cap</span>
+                <span style={{ fontFamily: fontMono, color: T.textMuted }}>{ac.maxPMRatio === 0 ? "Never PM" : ac.maxPMRatio != null ? `${Math.round(ac.maxPMRatio * 100)}%` : "No limit"}</span>
+              </div>
+              <input type="range" min="0" max="100" step="10" value={ac.maxPMRatio != null ? Math.round(ac.maxPMRatio * 100) : 100} onChange={e => u(c => {
+                if (!c.actorConstraints) c.actorConstraints = {};
+                if (!c.actorConstraints[actor]) c.actorConstraints[actor] = {};
+                const val = parseInt(e.target.value);
+                c.actorConstraints[actor].maxPMRatio = val === 100 ? undefined : val / 100;
+              })} style={{ width: "100%", accentColor: T.accent }} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: T.textFaint }}><span>Never PM</span><span>No limit</span></div>
+            </div>
+          </Card>;
+        })}
+      </div>}
 
       {tab === "data" && <div>
         <p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Export your data as a backup file. Import to restore on another device.</p>
@@ -414,6 +472,64 @@ function SettingsPanel({ config, onSave, onClose, showToast }) {
       </div>}
     </div>
     <div style={{ padding: "16px 24px", borderTop: `1px solid ${T.border}`, background: T.bgRaised, borderRadius: "0 0 18px 18px", display: "flex", gap: "10px", justifyContent: "flex-end" }}><Btn variant="ghost" onClick={onClose}>Cancel</Btn><Btn onClick={() => { onSave(cfg); setChanged(false) }} disabled={!changed}>{changed ? "💾 Save" : "✓ Saved"}</Btn></div>
+  </Card></Overlay>;
+}
+
+// ─── PASTE MESSAGE PANEL ───────────────────────────────────────────────────
+function PasteMessagePanel({ config, availability, activeDates, onApply, onClose }) {
+  const [actor, setActor] = useState(config.actors[0]);
+  const [text, setText] = useState("");
+  const [preview, setPreview] = useState(null);
+
+  const parseMessage = () => {
+    const result = { shift: null, days: [], excludeDates: [], available: null };
+    if (/unavailable|not available|out this month|won't be/i.test(text)) {
+      result.available = false;
+    } else if (/available all month|can do everything|all month/i.test(text)) {
+      result.available = true;
+    }
+    if (/am only|mornings? only|noon only|morning shift/i.test(text)) result.shift = "am";
+    else if (/pm only|evenings? only|8 ?pm only|evening shift/i.test(text)) result.shift = "pm";
+    else if (/no pm|not pm|not evenings?/i.test(text)) result.shift = "am";
+    else if (/no am|not am|not mornings?/i.test(text)) result.shift = "pm";
+    const dayPatterns = [{ rx: /mondays?/i, day: "Monday" }, { rx: /tuesdays?/i, day: "Tuesday" }, { rx: /wednesdays?/i, day: "Wednesday" }, { rx: /thursdays?/i, day: "Thursday" }, { rx: /fridays?/i, day: "Friday" }];
+    result.days = dayPatterns.filter(d => d.rx.test(text)).map(d => d.day);
+    (text.match(/except (?:the )?(\d+)(?:st|nd|rd|th)?/gi) || []).forEach(m => {
+      const n = m.match(/\d+/); if (n) result.excludeDates.push(parseInt(n[0]));
+    });
+    setPreview(result);
+  };
+
+  const applyResult = () => {
+    if (!preview) return;
+    const newAvail = { ...availability };
+    activeDates.forEach(ds => {
+      const [y, m, d] = ds.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      const dayName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][date.getDay()];
+      if (!newAvail[ds]) newAvail[ds] = {};
+      if (preview.excludeDates.includes(d)) { newAvail[ds][actor] = false; return; }
+      if (preview.available === false) { newAvail[ds][actor] = false; return; }
+      if (preview.days.length > 0 && !preview.days.includes(dayName)) { newAvail[ds][actor] = false; return; }
+      newAvail[ds][actor] = preview.shift === "am" ? "am" : preview.shift === "pm" ? "pm" : "both";
+    });
+    onApply(newAvail);
+    onClose();
+  };
+
+  const summaryLines = preview ? (preview.available === false ? ["❌ Unavailable all month"] : [
+    preview.days.length > 0 ? `📅 Days: ${preview.days.join(", ")} only` : "📅 Days: all training days",
+    preview.shift === "am" ? "☀️ Shift: AM only" : preview.shift === "pm" ? "🌙 Shift: PM only" : "🔄 Shift: both AM and PM",
+    ...(preview.excludeDates.length > 0 ? [`🚫 Exclude: ${preview.excludeDates.map(d => `the ${d}th`).join(", ")}`] : []),
+  ]) : [];
+
+  return <Overlay onClose={onClose}><Card style={{ padding: "24px" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}><h2 style={{ fontFamily: font, fontSize: "18px", fontWeight: "800", margin: 0, color: T.text }}>📩 Paste Availability</h2><button onClick={onClose} aria-label="Close" style={{ ...btnBase, background: "none", fontSize: "20px", color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>✕</button></div>
+    <div style={{ marginBottom: "12px" }}><div style={{ fontSize: "12px", fontWeight: "700", color: T.textMuted, marginBottom: "6px" }}>ACTOR</div><StyledSelect value={actor} onChange={e => { setActor(e.target.value); setPreview(null); }} style={{ width: "100%" }}>{config.actors.map(a => <option key={a}>{a}</option>)}</StyledSelect></div>
+    <div style={{ marginBottom: "12px" }}><div style={{ fontSize: "12px", fontWeight: "700", color: T.textMuted, marginBottom: "6px" }}>MESSAGE</div><textarea value={text} onChange={e => { setText(e.target.value); setPreview(null); }} placeholder={"e.g. Tuesdays and Wednesdays only, mornings\nor: available all month except the 15th\nor: won't be available this month"} style={{ fontFamily: font, fontSize: "13px", padding: "10px 14px", borderRadius: "10px", border: `1.5px solid ${T.border}`, background: T.bgInput, color: T.text, outline: "none", width: "100%", minHeight: "80px", resize: "vertical", lineHeight: "1.5", boxSizing: "border-box" }} onFocus={e => e.target.style.borderColor = T.accent} onBlur={e => e.target.style.borderColor = T.border} /></div>
+    <Btn onClick={parseMessage} variant="secondary" style={{ width: "100%", marginBottom: "12px" }} disabled={!text.trim()}>🔍 Parse</Btn>
+    {preview && <Card style={{ marginBottom: "12px", background: T.accentSoft, border: `1px solid ${T.accent}20` }}><div style={{ fontSize: "12px", fontWeight: "700", color: T.accent, marginBottom: "8px" }}>PREVIEW — {actor}</div>{summaryLines.map((line, i) => <div key={i} style={{ fontSize: "13px", color: T.text, marginBottom: "4px" }}>{line}</div>)}</Card>}
+    <div style={{ display: "flex", gap: "8px" }}><Btn variant="ghost" onClick={onClose} style={{ flex: 1 }}>Cancel</Btn><Btn onClick={applyResult} disabled={!preview} style={{ flex: 2 }}>✓ Apply</Btn></div>
   </Card></Overlay>;
 }
 
@@ -437,6 +553,7 @@ export default function CITScheduler() {
   const [toast, setToast] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showPasteMsg, setShowPasteMsg] = useState(false);
 
   const weeks = getWeeksInMonth(year, month);
   const monthName = new Date(year, month).toLocaleString('default', { month: 'long' });
@@ -611,6 +728,7 @@ export default function CITScheduler() {
       {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
       {showShare && schedule && <ShareModal weeks={weeks} weekPlans={weekPlans} schedule={schedule} monthName={monthName} year={year} config={config} onClose={() => setShowShare(false)} showToast={showT} />}
       {showSettings && <SettingsPanel config={config} onSave={saveConfig} onClose={() => setShowSettings(false)} showToast={showT} />}
+      {showPasteMsg && <PasteMessagePanel config={config} availability={availability} activeDates={activeDates} onApply={newAvail => { setAvailability(newAvail); save(newAvail, weekPlans, schedule, errors, overrides); showT("Availability updated ✓", "success"); }} onClose={() => setShowPasteMsg(false)} />}
       {toast && <div style={{ position: "fixed", top: "80px", left: "50%", transform: "translateX(-50%)", zIndex: 999, padding: "10px 22px", borderRadius: "12px", fontFamily: font, fontSize: "13px", fontWeight: "700", background: toast.type === "success" ? T.green : toast.type === "warning" ? T.amber : toast.type === "error" ? T.red : T.accent, color: "#fff", boxShadow: `0 0 20px ${(toast.type === "success" ? T.green : T.accent)}40`, animation: "slideDown .3s ease", letterSpacing: "0.02em" }}>{toast.msg}</div>}
 
       {/* HEADER */}
@@ -659,7 +777,7 @@ export default function CITScheduler() {
 
         {/* ═══ AVAILABILITY TAB ═══ */}
         {view === "availability" && <div>
-          <SectionHead icon="📋" title="Actor Availability" sub="Tap names to cycle: Both shifts → AM only → PM only → Off" right={<Btn variant="small" onClick={copyFromLastMonth} style={{ fontSize: "11px" }}>📋 Copy Last Month</Btn>} />
+          <SectionHead icon="📋" title="Actor Availability" sub="Tap names to cycle: Both shifts → AM only → PM only → Off" right={<div style={{ display: "flex", gap: "6px" }}><Btn variant="small" onClick={() => setShowPasteMsg(true)} style={{ fontSize: "11px" }}>📩 Paste Message</Btn><Btn variant="small" onClick={copyFromLastMonth} style={{ fontSize: "11px" }}>📋 Copy Last Month</Btn></div>} />
           {weeks.map((wd, wi) => {
             const plan = weekPlans[`week${wi}`] || getDefaultWeekPlan(wd, config);
             const activeSlots = SLOT_KEYS.filter(sk => plan[sk]);
@@ -683,7 +801,8 @@ export default function CITScheduler() {
                       const norm = normalizeAvail(availability[ds]?.[actor]);
                       const isActive = !!norm;
                       const badge = norm === "am" ? " ☀️" : norm === "pm" ? " 🌙" : "";
-                      return <Chip key={actor} active={isActive} dimmed={!approvedSet.has(actor)} color={config.actorColors[actor]} onClick={() => cycleAvailability(ds, actor)}>{actor}{badge}</Chip>;
+                      const chipColor = norm === "am" ? T.sunGold : norm === "pm" ? T.nightIndigo : config.actorColors[actor];
+                      return <Chip key={actor} active={isActive} dimmed={!approvedSet.has(actor)} color={chipColor} onClick={() => cycleAvailability(ds, actor)}>{actor}{badge}</Chip>;
                     })}
                   </div>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
@@ -767,7 +886,7 @@ export default function CITScheduler() {
           <SectionHead icon="📖" title="Quick Guide" />
           <Card style={{ marginBottom: "10px" }}><h3 style={{ fontSize: "15px", fontWeight: "700", margin: "0 0 10px" }}>🗓 Training Slots</h3>{SLOT_KEYS.map(sk => <div key={sk} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}><SlotBar slotKey={sk} /><div><span style={{ fontWeight: "700", fontSize: "13px" }}>{config.slotNames[sk]}</span><span style={{ fontSize: "12px", color: T.textMuted, marginLeft: "8px" }}>Default: {config.defaultDays[sk]}</span><div style={{ fontSize: "11px", color: T.textFaint, marginTop: "1px" }}>{(config.slotScenarios[sk] || []).map(s => `${config.scenarioIcons[s] || ""} ${s}`).join("  ·  ")}</div></div></div>)}</Card>
           <Card style={{ marginBottom: "10px" }}><h3 style={{ fontSize: "15px", fontWeight: "700", margin: "0 0 10px" }}>🎭 Approved Actors</h3>{Object.entries(config.scenarioActors).map(([sc, actors]) => <div key={sc} style={{ marginBottom: "8px" }}><div style={{ fontWeight: "600", fontSize: "13px", marginBottom: "4px" }}>{config.scenarioIcons[sc] || "🎭"} {sc}</div><div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>{actors.map(a => <span key={a} style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "6px", background: `${config.actorColors[a] || T.textSoft}15`, color: config.actorColors[a] || T.textSoft, fontWeight: "500" }}>{a}</span>)}</div></div>)}</Card>
-          <Card style={{ marginBottom: "10px" }}><h3 style={{ fontSize: "15px", fontWeight: "700", margin: "0 0 10px" }}>⚠️ Rules</h3><div style={{ fontSize: "13px", color: T.textSoft, lineHeight: 1.7 }}><p style={{ margin: "0 0 4px" }}>1 actor per scenario · 1 scenario per actor per shift</p>{(config.conflicts || []).map((r, i) => <p key={i} style={{ margin: "0 0 4px" }}>Can't play {r.actor_cannot_play.filter(Boolean).join(" + ")} same shift</p>)}<p style={{ margin: 0 }}>AM = {config.shiftTimes.AM} · PM = {config.shiftTimes.PM}</p></div></Card>
+          <Card style={{ marginBottom: "10px" }}><h3 style={{ fontSize: "15px", fontWeight: "700", margin: "0 0 10px" }}>⚠️ Rules</h3><div style={{ fontSize: "13px", color: T.textSoft, lineHeight: 1.7 }}><p style={{ margin: "0 0 4px" }}>1 actor per scenario · 1 scenario per actor per shift · same actor CAN do AM + PM on the same day</p>{(config.conflicts || []).map((r, i) => <p key={i} style={{ margin: "0 0 4px" }}>Can't play {r.actor_cannot_play.filter(Boolean).join(" + ")} same shift</p>)}<p style={{ margin: 0 }}>AM = {config.shiftTimes.AM} · PM = {config.shiftTimes.PM}</p></div></Card>
           <Card style={{ marginBottom: "10px" }}><h3 style={{ fontSize: "15px", fontWeight: "700", margin: "0 0 10px" }}>📝 Monthly Flow</h3><div style={{ fontSize: "13px", color: T.textSoft, lineHeight: 1.9 }}>{["By 15th — get actor availability", "Set up week plans (adjust for cancellations)", "Enter availability", "Generate schedule", "Review & adjust swaps", "Export to Google Calendar", "Share with actors"].map((s, i) => <p key={i} style={{ margin: "0 0 2px" }}>☐ {s}</p>)}</div></Card>
           <Card><h3 style={{ fontSize: "15px", fontWeight: "700", margin: "0 0 10px" }}>💡 Tips</h3><div style={{ fontSize: "13px", color: T.textSoft, lineHeight: 1.7 }}><p style={{ margin: "0 0 4px" }}><strong style={{ color: T.text }}>Snowstorm?</strong> Use the Plan tab to shift all days forward with ▶, or cancel the whole week.</p><p style={{ margin: "0 0 4px" }}><strong style={{ color: T.text }}>New actor?</strong> ⚙️ Settings → Actors → add them, then assign to scenarios.</p><p style={{ margin: "0 0 4px" }}><strong style={{ color: T.text }}>Scenario change?</strong> ⚙️ Settings → Scenarios to update who's approved.</p><p style={{ margin: 0 }}><strong style={{ color: T.text }}>Text actors</strong> via Share → pick Individual → select actor → copy.</p></div></Card>
         </div>}
@@ -780,9 +899,11 @@ export default function CITScheduler() {
         button:active{transform:scale(0.97)}
         select{color-scheme:light}
         option{background:${T.bgInput};color:${T.text}}
-        ::-webkit-scrollbar{width:6px;height:6px}
-        ::-webkit-scrollbar-track{background:${T.bg}}
-        ::-webkit-scrollbar-thumb{background:${T.border};border-radius:3px}
+        html{scrollbar-width:thin;scrollbar-color:${T.coral} ${T.bgRaised}}
+        ::-webkit-scrollbar{width:12px;height:12px}
+        ::-webkit-scrollbar-track{background:${T.bgRaised};border-radius:6px}
+        ::-webkit-scrollbar-thumb{background:${T.coral};border-radius:6px;border:3px solid ${T.bgRaised};min-height:40px}
+        ::-webkit-scrollbar-thumb:hover{background:#E8917A}
         @media(max-width:480px){
           body{overflow-x:hidden}
         }
