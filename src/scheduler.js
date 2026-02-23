@@ -103,25 +103,10 @@ export function getDefaultWeekPlan(weekDays, config) {
  */
 export function generateSchedule(weeks, weekPlans, availability, config) {
   const { scenarioActors, slotScenarios, conflicts } = config;
-  const schedule = {};
-  const errors = [];
 
-  // Track cumulative usage across the entire month for load-balancing
-  const usageCount = {};
-  for (const actor of config.actors) {
-    usageCount[actor] = 0;
-  }
-  const pmCount = {};
-  for (const actor of config.actors) {
-    pmCount[actor] = 0;
-  }
-
-  // Pre-calculate total eligible slots per actor for fairness tie-breaking.
-  // Actors with fewer opportunities get priority when usage counts are tied.
+  // ── Pre-compute eligible count for fairness tie-breaking ──────────────────
   const eligibleCount = {};
-  for (const actor of config.actors) {
-    eligibleCount[actor] = 0;
-  }
+  for (const actor of config.actors) eligibleCount[actor] = 0;
   for (let ewi = 0; ewi < weeks.length; ewi++) {
     const ewk = `week${ewi}`;
     const ewp = weekPlans[ewk] || getDefaultWeekPlan(weeks[ewi], config);
@@ -130,148 +115,239 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
       const edate = ewp[esk];
       if (!edate) continue;
       const eda = availability[edate] || {};
-      const esc = slotScenarios[esk] || [];
       for (const eshift of SHIFTS) {
-        for (const escenario of esc) {
-          const eapproved = scenarioActors[escenario] || [];
-          for (const actor of eapproved) {
-            if (isAvailableForShift(eda[actor], eshift)) {
-              const ec = config.actorConstraints?.[actor];
-              if (ec?.allowedDays?.length > 0) {
-                const [ey, em, ed] = edate.split('-').map(Number);
-                const edow = new Date(ey, em - 1, ed).getDay();
-                const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-                if (!ec.allowedDays.includes(dayNames[edow])) continue;
-              }
-              eligibleCount[actor]++;
+        for (const escenario of slotScenarios[esk] || []) {
+          for (const actor of scenarioActors[escenario] || []) {
+            if (!isAvailableForShift(eda[actor], eshift)) continue;
+            const ec = config.actorConstraints?.[actor];
+            if (ec?.allowedDays?.length > 0) {
+              const [ey, em, ed_] = edate.split('-').map(Number);
+              if (!ec.allowedDays.includes(DAYS_LONG[new Date(ey, em - 1, ed_).getDay()])) continue;
             }
+            eligibleCount[actor]++;
           }
         }
       }
     }
   }
+
+  // ── Build slot list and schedule skeleton ─────────────────────────────────
+  const allSlots = [];
+  const skeleton = {};
+  for (let wi = 0; wi < weeks.length; wi++) {
+    const weekKey = `week${wi}`;
+    const wp = weekPlans[weekKey] || getDefaultWeekPlan(weeks[wi], config);
+    if (!wp) continue;
+    skeleton[weekKey] = {};
+    for (const slotKey of SLOT_KEYS) {
+      const date = wp[slotKey];
+      if (!date) { skeleton[weekKey][slotKey] = null; continue; }
+      skeleton[weekKey][slotKey] = { date, AM: {}, PM: {} };
+      for (const shift of SHIFTS) {
+        for (const scenario of slotScenarios[slotKey] || []) {
+          skeleton[weekKey][slotKey][shift][scenario] = null;
+          allSlots.push({ wi, weekKey, slotKey, shift, scenario, date });
+        }
+      }
+    }
+  }
+
+  // ── State management ───────────────────────────────────────────────────────
+  function freshState() {
+    const sched = {};
+    for (const [wk, wv] of Object.entries(skeleton)) {
+      if (!wv) { sched[wk] = null; continue; }
+      sched[wk] = {};
+      for (const [sk, sv] of Object.entries(wv)) {
+        if (!sv) { sched[wk][sk] = null; continue; }
+        sched[wk][sk] = { date: sv.date, AM: { ...sv.AM }, PM: { ...sv.PM } };
+      }
+    }
+    return {
+      schedule: sched,
+      wa: {},  // wa[weekKey][shift][actor] = Set<scenario>
+      usageCount: Object.fromEntries(config.actors.map(a => [a, 0])),
+      pmCount: Object.fromEntries(config.actors.map(a => [a, 0])),
+      backtrackCount: 0,
+    };
+  }
+
+  function applyAssign(state, slot, actor) {
+    const { weekKey, slotKey, shift, scenario } = slot;
+    state.schedule[weekKey][slotKey][shift][scenario] = actor;
+    if (!state.wa[weekKey]) state.wa[weekKey] = { AM: {}, PM: {} };
+    const w = state.wa[weekKey];
+    if (!w[shift][actor]) w[shift][actor] = new Set();
+    w[shift][actor].add(scenario);
+    state.usageCount[actor]++;
+    if (shift === 'PM') state.pmCount[actor]++;
+  }
+
+  function undoAssign(state, slot, actor) {
+    const { weekKey, slotKey, shift, scenario } = slot;
+    state.schedule[weekKey][slotKey][shift][scenario] = null;
+    const w = state.wa[weekKey];
+    w[shift][actor].delete(scenario);
+    if (w[shift][actor].size === 0) delete w[shift][actor];
+    state.usageCount[actor]--;
+    if (shift === 'PM') state.pmCount[actor]--;
+  }
+
+  // ── Constraint-aware candidate filter ─────────────────────────────────────
+  // relaxLevel: 0=strict, 1=ignore PM cap, 2=+ignore allowedDays, 3=+ignore conflicts
+  function getEligible(slot, state, relaxLevel) {
+    const { weekKey, shift, scenario, date } = slot;
+    const approved = scenarioActors[scenario] || [];
+    const dayAvail = availability[date] || {};
+    const w = state.wa[weekKey] || { AM: {}, PM: {} };
+    return approved.filter(actor => {
+      if (!isAvailableForShift(dayAvail[actor], shift)) return false;
+      if (w[shift][actor]?.size > 0) return false;
+      const ac = config.actorConstraints?.[actor];
+      if (relaxLevel < 3 && hasConflict(actor, scenario, shift, w, conflicts)) return false;
+      if (relaxLevel < 2 && ac?.allowedDays?.length > 0) {
+        const [dy, dm, dd] = date.split('-').map(Number);
+        if (!ac.allowedDays.includes(DAYS_LONG[new Date(dy, dm - 1, dd).getDay()])) return false;
+      }
+      if (relaxLevel < 1 && shift === 'PM' && ac?.maxPMRatio != null) {
+        if (ac.maxPMRatio === 0) return false;
+        if (state.usageCount[actor] > 0 &&
+            state.pmCount[actor] / state.usageCount[actor] >= ac.maxPMRatio) return false;
+      }
+      return true;
+    });
+  }
+
+  function rankCandidates(candidates, shift, state) {
+    return [...candidates].sort((a, b) => {
+      const ud = state.usageCount[a] - state.usageCount[b];
+      if (ud !== 0) return ud;
+      if (shift === 'PM') {
+        const pa = config.actorConstraints?.[a]?.preferAM ? 1 : 0;
+        const pb = config.actorConstraints?.[b]?.preferAM ? 1 : 0;
+        if (pa !== pb) return pa - pb;
+      }
+      return eligibleCount[a] - eligibleCount[b];
+    });
+  }
+
+  // ── Backtracking search with MRV + forward checking ───────────────────────
+  function backtrack(slots, idx, state, relaxLevel) {
+    if (idx === slots.length) return true;
+    if (++state.backtrackCount > 50000) return false;
+
+    // MRV: swap the slot with the fewest eligible candidates to current position
+    let mrvIdx = idx, mrvCount = Infinity;
+    for (let i = idx; i < slots.length; i++) {
+      const cnt = getEligible(slots[i], state, relaxLevel).length;
+      if (cnt < mrvCount) { mrvCount = cnt; mrvIdx = i; }
+    }
+    [slots[idx], slots[mrvIdx]] = [slots[mrvIdx], slots[idx]];
+    const slot = slots[idx];
+
+    const candidates = rankCandidates(getEligible(slot, state, relaxLevel), slot.shift, state);
+    if (candidates.length === 0) {
+      [slots[idx], slots[mrvIdx]] = [slots[mrvIdx], slots[idx]]; // swap back
+      return false;
+    }
+
+    for (const actor of candidates) {
+      applyAssign(state, slot, actor);
+      // Forward check: no remaining slot should drop to 0 eligible candidates
+      let ok = true;
+      for (let i = idx + 1; i < slots.length; i++) {
+        if (getEligible(slots[i], state, relaxLevel).length === 0) { ok = false; break; }
+      }
+      if (ok && backtrack(slots, idx + 1, state, relaxLevel)) return true;
+      undoAssign(state, slot, actor);
+    }
+
+    [slots[idx], slots[mrvIdx]] = [slots[mrvIdx], slots[idx]]; // swap back
+    return false;
+  }
+
+  // ── Try backtracking at each relaxation level ─────────────────────────────
+  for (let relaxLevel = 0; relaxLevel <= 3; relaxLevel++) {
+    const state = freshState();
+    if (backtrack([...allSlots], 0, state, relaxLevel)) {
+      return { schedule: state.schedule, errors: [] };
+    }
+  }
+
+  // ── Greedy fallback: runs when pool is genuinely too thin ─────────────────
+  // Fills what it can with strict constraints; builds rich diagnostics for gaps.
+  function explainElim(actor, slot, state) {
+    const { weekKey, shift, scenario, date } = slot;
+    const dayAvail = availability[date] || {};
+    const w = state.wa[weekKey] || { AM: {}, PM: {} };
+    const ac = config.actorConstraints?.[actor];
+    if (!isAvailableForShift(dayAvail[actor], shift)) {
+      const norm = normalizeAvail(dayAvail[actor]);
+      return norm
+        ? `Only available ${norm === 'am' ? 'AM' : 'PM'} on ${fmtDateShort(date)}`
+        : `Not marked available on ${fmtDateShort(date)}`;
+    }
+    if (w[shift][actor]?.size > 0) {
+      return `Already used in ${shift} (${[...w[shift][actor]].join(', ')})`;
+    }
+    if (ac?.allowedDays?.length > 0) {
+      const [dy, dm, dd] = date.split('-').map(Number);
+      const dow = DAYS_LONG[new Date(dy, dm - 1, dd).getDay()];
+      if (!ac.allowedDays.includes(dow)) return `Only available on ${ac.allowedDays.join('/')} (this is ${dow})`;
+    }
+    if (shift === 'PM' && ac?.maxPMRatio != null) {
+      if (ac.maxPMRatio === 0) return `PM not permitted`;
+      if (state.usageCount[actor] > 0 && state.pmCount[actor] / state.usageCount[actor] >= ac.maxPMRatio)
+        return `PM cap reached (${Math.round(ac.maxPMRatio * 100)}% max)`;
+    }
+    if (hasConflict(actor, scenario, shift, w, conflicts)) return `Conflict rule with already-assigned scenario`;
+    return null;
+  }
+
+  const fbState = freshState();
+  const errors = [];
 
   for (let wi = 0; wi < weeks.length; wi++) {
     const weekKey = `week${wi}`;
     const wp = weekPlans[weekKey] || getDefaultWeekPlan(weeks[wi], config);
     if (!wp) continue;
-
-    schedule[weekKey] = {};
-
-    // Collect all assignments for this week so we can enforce cross-slot
-    // conflict rules within the same shift (AM or PM).
-    // Structure: weekAssignments[shift][actor] = Set of scenario names
-    const weekAssignments = { AM: {}, PM: {} };
-
     for (const slotKey of SLOT_KEYS) {
       const date = wp[slotKey];
-      if (!date) {
-        // Slot canceled — skip
-        schedule[weekKey][slotKey] = null;
-        continue;
-      }
-
-      const scenarios = slotScenarios[slotKey];
-      if (!scenarios || scenarios.length === 0) {
-        schedule[weekKey][slotKey] = { date, AM: {}, PM: {} };
-        continue;
-      }
-
+      if (!date) continue;
       const dayAvail = availability[date] || {};
-      const slotResult = { date, AM: {}, PM: {} };
-
       for (const shift of SHIFTS) {
-        // Track actors used within this specific shift+slot so each actor
-        // gets at most 1 scenario per shift within this slot.
-        const usedInShiftSlot = new Set();
-
-        // Sort scenarios by scarcity: fewer available+approved actors first
-        const scenarioOrder = [...scenarios].sort((a, b) => {
-          const countA = candidateCount(a, dayAvail, scenarioActors, shift);
-          const countB = candidateCount(b, dayAvail, scenarioActors, shift);
-          return countA - countB;
-        });
-
+        const scenarioOrder = [...(slotScenarios[slotKey] || [])].sort((a, b) =>
+          candidateCount(a, dayAvail, scenarioActors, shift) -
+          candidateCount(b, dayAvail, scenarioActors, shift)
+        );
         for (const scenario of scenarioOrder) {
-          const approved = scenarioActors[scenario];
-          if (!approved || approved.length === 0) {
-            slotResult[shift][scenario] = null;
-            errors.push(
-              `Wk${wi + 1} ${fmtDateShort(date)} ${shift}: No approved actors for ${scenario}`
-            );
-            continue;
-          }
-
-          // Filter candidates
-          const candidates = approved.filter((actor) => {
-            // Must be available for this shift (AM/PM aware)
-            if (!isAvailableForShift(dayAvail[actor], shift)) return false;
-            // Must not already be assigned in this shift+slot
-            if (usedInShiftSlot.has(actor)) return false;
-            // Must not already be assigned in this shift in another slot
-            // (1 scenario per actor per shift across ALL slots)
-            if (weekAssignments[shift][actor] && weekAssignments[shift][actor].size > 0) {
-              return false;
-            }
-            // Conflict rules: check across all slots in same shift
-            if (hasConflict(actor, scenario, shift, weekAssignments, conflicts)) {
-              return false;
-            }
-            // Actor constraints: day-of-week hard filter
-            const ac = config.actorConstraints?.[actor];
-            if (ac?.allowedDays?.length > 0) {
-              const [dy, dm, dd] = date.split('-').map(Number);
-              const adow = new Date(dy, dm - 1, dd).getDay();
-              const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-              if (!ac.allowedDays.includes(dayNames[adow])) return false;
-            }
-            // PM ratio cap
-            if (shift === "PM" && ac?.maxPMRatio != null) {
-              if (ac.maxPMRatio === 0) return false;
-              if (usageCount[actor] > 0 && pmCount[actor] / usageCount[actor] >= ac.maxPMRatio) return false;
-            }
-            return true;
-          });
-
+          const slot = { wi, weekKey, slotKey, shift, scenario, date };
+          const candidates = rankCandidates(getEligible(slot, fbState, 0), shift, fbState);
           if (candidates.length === 0) {
-            slotResult[shift][scenario] = null;
-            errors.push(
-              `Wk${wi + 1} ${fmtDateShort(date)} ${shift}: No actor for ${scenario}`
-            );
+            const approved = scenarioActors[scenario] || [];
+            const eliminations = approved.flatMap(actor => {
+              const r = explainElim(actor, slot, fbState);
+              return r ? [{ actor, reason: r }] : [];
+            });
+            const filledCount = approved.length - eliminations.length;
+            errors.push({
+              slot: `Wk${wi + 1} ${fmtDateShort(date)} ${shift}`,
+              scenario, shift, date, weekKey, slotKey,
+              approvedActors: approved,
+              eliminations,
+              suggestion: filledCount === 0
+                ? `All ${approved.length} approved actor${approved.length !== 1 ? 's' : ''} blocked. Approve more actors for ${scenario} or adjust availability.`
+                : `${filledCount} actor${filledCount !== 1 ? 's' : ''} eligible but already placed this shift. Approve more actors for ${scenario}.`,
+            });
             continue;
           }
-
-          // Sort by lowest total usage; break ties by fewer opportunities first
-          candidates.sort((a, b) => {
-            const usageDiff = usageCount[a] - usageCount[b];
-            if (usageDiff !== 0) return usageDiff;
-            if (shift === "PM") {
-              const aPreferAM = config.actorConstraints?.[a]?.preferAM ? 1 : 0;
-              const bPreferAM = config.actorConstraints?.[b]?.preferAM ? 1 : 0;
-              if (aPreferAM !== bPreferAM) return aPreferAM - bPreferAM;
-            }
-            return eligibleCount[a] - eligibleCount[b];
-          });
-
-          const chosen = candidates[0];
-          slotResult[shift][scenario] = chosen;
-          usedInShiftSlot.add(chosen);
-          usageCount[chosen]++;
-          if (shift === "PM") pmCount[chosen]++;
-
-          // Track in week-level assignments for cross-slot conflict checking
-          if (!weekAssignments[shift][chosen]) {
-            weekAssignments[shift][chosen] = new Set();
-          }
-          weekAssignments[shift][chosen].add(scenario);
+          applyAssign(fbState, slot, candidates[0]);
         }
       }
-
-      schedule[weekKey][slotKey] = slotResult;
     }
   }
 
-  return { schedule, errors };
+  return { schedule: fbState.schedule, errors };
 }
 
 /**

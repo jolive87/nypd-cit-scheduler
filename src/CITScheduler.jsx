@@ -823,7 +823,17 @@ export default function CITScheduler() {
         {/* ═══ SCHEDULE TAB ═══ */}
         {view === "schedule" && <div>
           {!schedule ? <Card style={{ textAlign: "center", padding: "48px 20px" }}><div style={{ fontSize: "44px", marginBottom: "10px" }}>📅</div><h3 style={{ fontSize: "17px", fontWeight: "800", color: T.text, margin: "0 0 8px" }}>No schedule yet</h3><p style={{ fontSize: "14px", color: T.textMuted, margin: "0 0 16px" }}>Set your plan and availability first.</p><Btn onClick={() => setView("plan")}>🗓 Go to Plan →</Btn></Card> : <>
-            {errors.length > 0 && <Card style={{ marginBottom: "14px", border: `1px solid ${T.red}30`, background: T.redSoft }}><p style={{ fontWeight: "700", fontSize: "13px", color: T.red, margin: "0 0 6px" }}>⚠️ {errors.length} unfilled slot{errors.length > 1 ? "s" : ""}</p>{errors.map((e, i) => <p key={i} style={{ fontSize: "12px", color: T.textSoft, margin: "2px 0" }}>{e}</p>)}</Card>}
+            {errors.length > 0 && <Card style={{ marginBottom: "14px", border: `1px solid ${T.red}30`, background: T.redSoft }}>
+              <p style={{ fontWeight: "700", fontSize: "13px", color: T.red, margin: "0 0 8px" }}>⚠️ {errors.length} unfilled slot{errors.length > 1 ? "s" : ""}</p>
+              {errors.map((e, i) => {
+                if (typeof e === "string") return <p key={i} style={{ fontSize: "12px", color: T.textSoft, margin: "2px 0" }}>{e}</p>;
+                return <div key={i} style={{ marginBottom: "10px", padding: "10px 12px", borderRadius: "8px", background: `${T.red}08`, border: `1px solid ${T.red}15` }}>
+                  <div style={{ fontWeight: "700", fontSize: "12px", color: T.red, marginBottom: "5px" }}>{e.slot} — {e.scenario}</div>
+                  {e.eliminations.map((el, j) => <div key={j} style={{ fontSize: "11px", color: T.textMuted, marginBottom: "2px" }}><span style={{ fontWeight: "600", color: T.textSoft }}>{el.actor}:</span> {el.reason}</div>)}
+                  {e.suggestion && <div style={{ marginTop: "6px", fontSize: "11px", color: T.amber, fontStyle: "italic" }}>💡 {e.suggestion}</div>}
+                </div>;
+              })}
+            </Card>}
             <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}><Btn onClick={exportICSFile} disabled={exporting} style={{ flex: 1, minWidth: "140px" }}>{exporting ? "Exporting..." : "📥 Google Calendar"}</Btn><Btn variant="secondary" onClick={() => setShowShare(true)} style={{ flex: 1, minWidth: "140px" }}>📤 Share / Text</Btn></div>
             <p style={{ fontSize: "12px", color: T.textMuted, marginBottom: "14px" }}>Dropdowns let you swap any actor. Saves automatically.</p>
             {weeks.map((wd, wi) => {
