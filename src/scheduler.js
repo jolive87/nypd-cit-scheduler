@@ -348,10 +348,35 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     return report;
   }
 
+  // ── Post-optimization: swap to improve fairness ─────────────────────────
+  function optimizeFairness(state, relaxLevel) {
+    for (let iter = 0; iter < 200; iter++) {
+      let swapped = false;
+      const sorted = [...config.actors].sort((a, b) => state.usageCount[a] - state.usageCount[b]);
+      for (const underActor of sorted) {
+        if (state.usageCount[underActor] >= fairTarget) break;
+        for (const slot of allSlots) {
+          const cur = state.schedule[slot.weekKey]?.[slot.slotKey]?.[slot.shift]?.[slot.scenario];
+          if (!cur || state.usageCount[cur] <= state.usageCount[underActor] + 1) continue;
+          undoAssign(state, slot, cur);
+          if (getEligible(slot, state, relaxLevel).includes(underActor)) {
+            applyAssign(state, slot, underActor);
+            swapped = true;
+            break;
+          }
+          applyAssign(state, slot, cur);
+        }
+        if (swapped) break;
+      }
+      if (!swapped) break;
+    }
+  }
+
   // ── Try backtracking at each relaxation level ─────────────────────────────
   for (let relaxLevel = 0; relaxLevel <= 3; relaxLevel++) {
     const state = freshState();
     if (backtrack([...allSlots], 0, state, relaxLevel)) {
+      optimizeFairness(state, relaxLevel);
       return { schedule: state.schedule, errors: [], fairnessReport: buildFairnessReport(state) };
     }
   }
@@ -429,6 +454,7 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     }
   }
 
+  optimizeFairness(fbState, 0);
   return { schedule: fbState.schedule, errors, fairnessReport: buildFairnessReport(fbState) };
 }
 
