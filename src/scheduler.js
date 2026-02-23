@@ -247,6 +247,8 @@ export function getActorStats(weeks, weekPlans, schedule, config) {
     stats[actor] = { total: 0, scenarios: {} };
   }
 
+  if (!schedule) return stats;
+
   for (let wi = 0; wi < weeks.length; wi++) {
     const weekKey = `week${wi}`;
     const weekSched = schedule[weekKey];
