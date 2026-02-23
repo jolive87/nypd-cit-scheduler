@@ -1,0 +1,18 @@
+{
+  "name": "CIT Actor Scheduler",
+  "short_name": "CIT Scheduler",
+  "description": "NYPD Crisis Intervention Training actor scheduling tool",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#13161C",
+  "theme_color": "#13161C",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
