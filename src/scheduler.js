@@ -4,6 +4,31 @@ export const SLOT_KEYS = ["slot1", "slot2", "slot3"];
 export const SHIFTS = ["AM", "PM"];
 
 // ---------------------------------------------------------------------------
+// Availability Helpers (AM/PM support)
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize availability value. Handles backward compat: boolean true → "both".
+ * @returns {"both"|"am"|"pm"|false}
+ */
+export function normalizeAvail(val) {
+  if (val === true || val === "both") return "both";
+  if (val === "am") return "am";
+  if (val === "pm") return "pm";
+  return false;
+}
+
+/**
+ * Check if an availability value covers the given shift.
+ */
+function isAvailableForShift(availValue, shift) {
+  const norm = normalizeAvail(availValue);
+  if (!norm) return false;
+  if (norm === "both") return true;
+  return (norm === "am" && shift === "AM") || (norm === "pm" && shift === "PM");
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -87,6 +112,34 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     usageCount[actor] = 0;
   }
 
+  // Pre-calculate total eligible slots per actor for fairness tie-breaking.
+  // Actors with fewer opportunities get priority when usage counts are tied.
+  const eligibleCount = {};
+  for (const actor of config.actors) {
+    eligibleCount[actor] = 0;
+  }
+  for (let ewi = 0; ewi < weeks.length; ewi++) {
+    const ewk = `week${ewi}`;
+    const ewp = weekPlans[ewk] || getDefaultWeekPlan(weeks[ewi], config);
+    if (!ewp) continue;
+    for (const esk of SLOT_KEYS) {
+      const edate = ewp[esk];
+      if (!edate) continue;
+      const eda = availability[edate] || {};
+      const esc = slotScenarios[esk] || [];
+      for (const eshift of SHIFTS) {
+        for (const escenario of esc) {
+          const eapproved = scenarioActors[escenario] || [];
+          for (const actor of eapproved) {
+            if (isAvailableForShift(eda[actor], eshift)) {
+              eligibleCount[actor]++;
+            }
+          }
+        }
+      }
+    }
+  }
+
   for (let wi = 0; wi < weeks.length; wi++) {
     const weekKey = `week${wi}`;
     const wp = weekPlans[weekKey] || getDefaultWeekPlan(weeks[wi], config);
@@ -123,8 +176,8 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
 
         // Sort scenarios by scarcity: fewer available+approved actors first
         const scenarioOrder = [...scenarios].sort((a, b) => {
-          const countA = candidateCount(a, dayAvail, scenarioActors);
-          const countB = candidateCount(b, dayAvail, scenarioActors);
+          const countA = candidateCount(a, dayAvail, scenarioActors, shift);
+          const countB = candidateCount(b, dayAvail, scenarioActors, shift);
           return countA - countB;
         });
 
@@ -140,8 +193,8 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
 
           // Filter candidates
           const candidates = approved.filter((actor) => {
-            // Must be available this date
-            if (!dayAvail[actor]) return false;
+            // Must be available for this shift (AM/PM aware)
+            if (!isAvailableForShift(dayAvail[actor], shift)) return false;
             // Must not already be assigned in this shift+slot
             if (usedInShiftSlot.has(actor)) return false;
             // Must not already be assigned in this shift in another slot
@@ -164,8 +217,12 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
             continue;
           }
 
-          // Sort by lowest total usage for load balancing
-          candidates.sort((a, b) => usageCount[a] - usageCount[b]);
+          // Sort by lowest total usage; break ties by fewer opportunities first
+          candidates.sort((a, b) => {
+            const usageDiff = usageCount[a] - usageCount[b];
+            if (usageDiff !== 0) return usageDiff;
+            return eligibleCount[a] - eligibleCount[b];
+          });
 
           const chosen = candidates[0];
           slotResult[shift][scenario] = chosen;
@@ -188,12 +245,12 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
 }
 
 /**
- * Count how many actors are both approved AND available for a scenario on a given day.
+ * Count how many actors are both approved AND available for a scenario+shift.
  */
-function candidateCount(scenario, dayAvail, scenarioActors) {
+function candidateCount(scenario, dayAvail, scenarioActors, shift) {
   const approved = scenarioActors[scenario];
   if (!approved) return 0;
-  return approved.filter((actor) => dayAvail[actor]).length;
+  return approved.filter((actor) => isAvailableForShift(dayAvail[actor], shift)).length;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import storage, { exportBackup, importBackup } from "./storage.js";
 import { DEFAULT_CONFIG, ALL_WEEKDAYS, COLOR_PALETTE, ICON_OPTIONS, T, slotColors, font, fontMono } from "./config.js";
-import { generateSchedule, getActorStats, genShareText, genActorMsg, getDefaultWeekPlan, fmtDate, fmtDateShort, SLOT_KEYS, SHIFTS } from "./scheduler.js";
+import { generateSchedule, getActorStats, genShareText, genActorMsg, getDefaultWeekPlan, fmtDate, fmtDateShort, normalizeAvail, SLOT_KEYS, SHIFTS } from "./scheduler.js";
 import { generateICS, downloadICS } from "./ics.js";
 
 // ─── RESPONSIVE HOOK ────────────────────────────────────────────────────────
@@ -16,10 +16,33 @@ function useBreakpoint() {
 }
 
 // ─── DATE HELPERS ───────────────────────────────────────────────────────────
+function fmtDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 function getWeeksInMonth(year, month) {
   const weeks = [];
   const last = new Date(year, month + 1, 0);
   let weekDays = [];
+
+  // If month starts mid-week (Tue-Fri), prepend weekdays from previous month
+  const firstOfMonth = new Date(year, month, 1);
+  const firstDow = firstOfMonth.getDay();
+  if (firstDow > 1 && firstDow <= 5) {
+    const prevDay = new Date(year, month, 0); // last day of prev month
+    const preDays = [];
+    while (prevDay.getDay() >= 1 && prevDay.getDay() <= 5) {
+      preDays.unshift({
+        date: fmtDateStr(prevDay),
+        dayName: ALL_WEEKDAYS[prevDay.getDay() - 1],
+        dow: prevDay.getDay()
+      });
+      if (prevDay.getDay() === 1) break;
+      prevDay.setDate(prevDay.getDate() - 1);
+    }
+    if (preDays.length > 0) weekDays = preDays;
+  }
+
   for (let d = new Date(year, month, 1); d <= last; d.setDate(d.getDate() + 1)) {
     const dow = d.getDay();
     if (dow === 1 && weekDays.length > 0) {
@@ -28,12 +51,28 @@ function getWeeksInMonth(year, month) {
     }
     if (dow >= 1 && dow <= 5) {
       weekDays.push({
-        date: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
+        date: fmtDateStr(d),
         dayName: ALL_WEEKDAYS[dow - 1],
         dow
       });
     }
   }
+
+  // If last week is incomplete, extend into next month
+  if (weekDays.length > 0 && weekDays.length < 5) {
+    const nextDay = new Date(year, month + 1, 1);
+    while (weekDays.length < 5) {
+      const dow = nextDay.getDay();
+      if (dow === 0 || dow === 6) { nextDay.setDate(nextDay.getDate() + 1); continue; }
+      weekDays.push({
+        date: fmtDateStr(nextDay),
+        dayName: ALL_WEEKDAYS[dow - 1],
+        dow
+      });
+      nextDay.setDate(nextDay.getDate() + 1);
+    }
+  }
+
   if (weekDays.length > 0) weeks.push(weekDays);
   return weeks;
 }
@@ -446,11 +485,28 @@ export default function CITScheduler() {
     setShowSettings(false);
   };
 
-  const toggleActor = (ds, actor) => {
-    setAvailability(p => { const n = { ...p, [ds]: { ...p[ds], [actor]: !p[ds]?.[actor] } }; save(n, weekPlans, schedule, errors, overrides); return n });
+  const cycleAvailability = (ds, actor) => {
+    setAvailability(p => {
+      const current = p[ds]?.[actor];
+      const norm = normalizeAvail(current);
+      let next;
+      if (!norm) next = "both";
+      else if (norm === "both") next = "am";
+      else if (norm === "am") next = "pm";
+      else next = false;
+      const n = { ...p, [ds]: { ...p[ds], [actor]: next } };
+      save(n, weekPlans, schedule, errors, overrides);
+      return n;
+    });
   };
   const setAllAvail = ds => {
-    setAvailability(p => { const n = { ...p, [ds]: {} }; config.actors.forEach(a => n[ds][a] = true); save(n, weekPlans, schedule, errors, overrides); return n });
+    setAvailability(p => { const n = { ...p, [ds]: {} }; config.actors.forEach(a => n[ds][a] = "both"); save(n, weekPlans, schedule, errors, overrides); return n });
+  };
+  const setAllAM = ds => {
+    setAvailability(p => { const n = { ...p, [ds]: {} }; config.actors.forEach(a => n[ds][a] = "am"); save(n, weekPlans, schedule, errors, overrides); return n });
+  };
+  const setAllPM = ds => {
+    setAvailability(p => { const n = { ...p, [ds]: {} }; config.actors.forEach(a => n[ds][a] = "pm"); save(n, weekPlans, schedule, errors, overrides); return n });
   };
   const clearDay = ds => {
     setAvailability(p => { const n = { ...p, [ds]: {} }; save(n, weekPlans, schedule, errors, overrides); return n });
@@ -603,7 +659,7 @@ export default function CITScheduler() {
 
         {/* ═══ AVAILABILITY TAB ═══ */}
         {view === "availability" && <div>
-          <SectionHead icon="📋" title="Actor Availability" sub="Tap names to toggle available/unavailable for each active day." right={<Btn variant="small" onClick={copyFromLastMonth} style={{ fontSize: "11px" }}>📋 Copy Last Month</Btn>} />
+          <SectionHead icon="📋" title="Actor Availability" sub="Tap names to cycle: Both shifts → AM only → PM only → Off" right={<Btn variant="small" onClick={copyFromLastMonth} style={{ fontSize: "11px" }}>📋 Copy Last Month</Btn>} />
           {weeks.map((wd, wi) => {
             const plan = weekPlans[`week${wi}`] || getDefaultWeekPlan(wd, config);
             const activeSlots = SLOT_KEYS.filter(sk => plan[sk]);
@@ -615,7 +671,7 @@ export default function CITScheduler() {
                 const dayInfo = wd.find(w => w.date === ds);
                 const scenarios = config.slotScenarios[sk] || [];
                 const approvedSet = new Set(scenarios.flatMap(s => config.scenarioActors[s] || []));
-                const approvedAvail = [...approvedSet].filter(a => availability[ds]?.[a]).length;
+                const approvedAvail = [...approvedSet].filter(a => normalizeAvail(availability[ds]?.[a])).length;
                 const cl = slotColors[sk];
                 return <Card key={sk} style={{ marginBottom: "8px" }} accent={cl}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
@@ -623,9 +679,20 @@ export default function CITScheduler() {
                     <Badge type={approvedAvail >= 3 ? "success" : approvedAvail >= 2 ? "warning" : "error"}>{approvedAvail} ready</Badge>
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
-                    {config.actors.map(actor => <Chip key={actor} active={!!availability[ds]?.[actor]} dimmed={!approvedSet.has(actor)} color={config.actorColors[actor]} onClick={() => toggleActor(ds, actor)}>{actor}</Chip>)}
+                    {config.actors.map(actor => {
+                      const norm = normalizeAvail(availability[ds]?.[actor]);
+                      const isActive = !!norm;
+                      const badge = norm === "am" ? " ☀️" : norm === "pm" ? " 🌙" : "";
+                      return <Chip key={actor} active={isActive} dimmed={!approvedSet.has(actor)} color={config.actorColors[actor]} onClick={() => cycleAvailability(ds, actor)}>{actor}{badge}</Chip>;
+                    })}
                   </div>
-                  <div style={{ display: "flex", gap: "6px" }}><Btn variant="small" onClick={() => setAllAvail(ds)} style={{ minHeight: "36px" }}>✓ All</Btn><Btn variant="small" onClick={() => clearDay(ds)} style={{ minHeight: "36px" }}>✕ Clear</Btn></div>
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                    <Btn variant="small" onClick={() => setAllAvail(ds)} style={{ minHeight: "36px" }}>✓ All</Btn>
+                    <Btn variant="small" onClick={() => setAllAM(ds)} style={{ minHeight: "36px" }}>☀️ AM</Btn>
+                    <Btn variant="small" onClick={() => setAllPM(ds)} style={{ minHeight: "36px" }}>🌙 PM</Btn>
+                    <Btn variant="small" onClick={() => clearDay(ds)} style={{ minHeight: "36px" }}>✕ Clear</Btn>
+                  </div>
+                  <div style={{ fontSize: "10px", color: T.textFaint, marginTop: "4px" }}>Tap actor to cycle: Both → ☀️ AM → 🌙 PM → Off</div>
                 </Card>;
               })}
             </div>;
@@ -657,7 +724,12 @@ export default function CITScheduler() {
                       {scenarios.map(sc => {
                         const actor = schedule[wk]?.[sk]?.[shift]?.[sc];
                         const approved = config.scenarioActors[sc] || [];
-                        const availPick = approved.filter(a => availability[ds]?.[a]);
+                        const availPick = approved.filter(a => {
+                          const norm = normalizeAvail(availability[ds]?.[a]);
+                          if (!norm) return false;
+                          if (norm === "both") return true;
+                          return (norm === "am" && shift === "AM") || (norm === "pm" && shift === "PM");
+                        });
                         const acColor = actor ? (config.actorColors[actor] || T.textSoft) : null;
                         return <div key={sc} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: "10px", marginBottom: "4px", background: actor ? `${acColor}08` : T.redSoft, border: `1px solid ${actor ? `${acColor}20` : `${T.red}20`}` }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ fontSize: "15px" }}>{config.scenarioIcons[sc] || "🎭"}</span><span style={{ fontSize: "13px", fontWeight: "600" }}>{sc}</span></div>
@@ -681,7 +753,7 @@ export default function CITScheduler() {
         {view === "dashboard" && <div>
           <SectionHead icon="📊" title="Actor Stats" sub="Shift counts and workload distribution" />
           {!schedule && <Card style={{ marginBottom: "14px", textAlign: "center", padding: "24px 20px", border: `1px solid ${T.amber}25`, background: `${T.amber}08` }}><p style={{ fontSize: "14px", color: T.amber, fontWeight: "600", margin: "0 0 4px" }}>No schedule generated yet</p><p style={{ fontSize: "13px", color: T.textMuted, margin: 0 }}>Generate a schedule to see shift counts and workload balance.</p></Card>}
-          {config.actors.map(actor => { const s = actorStats[actor] || { total: 0, scenarios: {} }; const cl = config.actorColors[actor] || T.textSoft; const approvedFor = Object.entries(config.scenarioActors).filter(([, a]) => a.includes(actor)).map(([sc]) => sc); const ad = activeDates.filter(d => availability[d]?.[actor]).length;
+          {config.actors.map(actor => { const s = actorStats[actor] || { total: 0, scenarios: {} }; const cl = config.actorColors[actor] || T.textSoft; const approvedFor = Object.entries(config.scenarioActors).filter(([, a]) => a.includes(actor)).map(([sc]) => sc); const ad = activeDates.filter(d => normalizeAvail(availability[d]?.[actor])).length;
             return <Card key={actor} style={{ marginBottom: "8px" }} accent={s.total > 0 ? cl : null}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div style={{ display: "flex", alignItems: "center", gap: "12px" }}><div style={{ width: "38px", height: "38px", borderRadius: "10px", background: `${cl}20`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "15px", color: cl, border: `1.5px solid ${cl}30` }}>{actor[0]}</div><div><div style={{ fontWeight: "700", fontSize: "14px" }}>{actor}</div><div style={{ fontSize: "11px", color: T.textMuted }}>Avail {ad}/{activeDates.length} · {s.total} shift{s.total !== 1 ? "s" : ""}</div></div></div>{s.total > 0 && <div style={{ fontFamily: fontMono, fontSize: "20px", fontWeight: "700", color: cl, textShadow: `0 0 12px ${cl}30` }}>{s.total}</div>}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "8px" }}>{approvedFor.map(sc => <span key={sc} style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "6px", background: s.scenarios[sc] ? `${cl}15` : T.bgRaised, color: s.scenarios[sc] ? cl : T.textFaint, fontWeight: s.scenarios[sc] ? "600" : "400", border: `1px solid ${s.scenarios[sc] ? `${cl}25` : T.border}` }}>{config.scenarioIcons[sc] || ""} {sc}{s.scenarios[sc] ? ` ×${s.scenarios[sc]}` : ""}</span>)}</div>
