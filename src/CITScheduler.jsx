@@ -503,8 +503,8 @@ function PasteMessagePanel({ config, availability, activeDates, onApply, onClose
       const curMonth = activeDates.length > 0 ? parseInt(activeDates[0].split('-')[1]) - 1 : new Date().getMonth();
       const monthNames = { january:0, february:1, march:2, april:3, may:4, june:5, july:6, august:7, september:8, october:9, november:10, december:11 };
 
-      // Split into sentences by period
-      const sentences = normalized.split(/\./).map(s => s.trim()).filter(Boolean);
+      // Split into clauses by period, semicolon, or dash
+      const sentences = normalized.split(/[.;]|—|--/).map(s => s.trim()).filter(Boolean);
       let currentShift = "both";
 
       for (const sentence of sentences) {
