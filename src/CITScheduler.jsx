@@ -4,6 +4,17 @@ import { DEFAULT_CONFIG, ALL_WEEKDAYS, COLOR_PALETTE, ICON_OPTIONS, T, slotColor
 import { generateSchedule, getActorStats, genShareText, genActorMsg, getDefaultWeekPlan, fmtDate, fmtDateShort, SLOT_KEYS, SHIFTS } from "./scheduler.js";
 import { generateICS, downloadICS } from "./ics.js";
 
+// ─── RESPONSIVE HOOK ────────────────────────────────────────────────────────
+function useBreakpoint() {
+  const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 800);
+  useEffect(() => {
+    const handler = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return { isMobile: width < 480, isTablet: width >= 480 && width < 768, isDesktop: width >= 768, isWide: width >= 1024, width };
+}
+
 // ─── DATE HELPERS ───────────────────────────────────────────────────────────
 function getWeeksInMonth(year, month) {
   const weeks = [];
@@ -59,18 +70,18 @@ const btnBase = { fontFamily: font, border: "none", cursor: "pointer", transitio
 
 function Btn({ children, variant = "primary", onClick, style, disabled, "aria-label": ariaLabel }) {
   const v = {
-    primary: { background: `linear-gradient(135deg, ${T.accent} 0%, ${T.accentHover} 100%)`, color: "#fff", fontWeight: "700", boxShadow: `0 0 20px ${T.accentGlow}, 0 2px 4px rgba(0,0,0,0.3)`, padding: "11px 22px", borderRadius: "12px", fontSize: "13.5px" },
-    secondary: { background: T.bgRaised, color: T.textSoft, fontWeight: "600", boxShadow: "0 1px 3px rgba(0,0,0,0.2)", border: `1px solid ${T.border}`, padding: "10px 18px", borderRadius: "11px", fontSize: "13px" },
+    primary: { background: `linear-gradient(135deg, ${T.accent} 0%, ${T.accentHover} 100%)`, color: "#fff", fontWeight: "700", boxShadow: `0 0 20px ${T.accentGlow}, 0 2px 4px rgba(180,140,110,0.15)`, padding: "11px 22px", borderRadius: "12px", fontSize: "13.5px" },
+    secondary: { background: T.bgRaised, color: T.textSoft, fontWeight: "600", boxShadow: "0 1px 3px rgba(180,140,110,0.08)", border: `1px solid ${T.border}`, padding: "10px 18px", borderRadius: "11px", fontSize: "13px" },
     ghost: { background: "transparent", color: T.textMuted, fontWeight: "500", padding: "8px 14px", borderRadius: "10px", fontSize: "13px" },
     danger: { background: T.redSoft, color: T.red, fontWeight: "600", padding: "7px 14px", borderRadius: "9px", fontSize: "12px", border: `1px solid ${T.red}30` },
     small: { background: T.bgRaised, color: T.textMuted, fontWeight: "600", padding: "6px 12px", borderRadius: "8px", fontSize: "11px", border: `1px solid ${T.border}` },
-    mint: { background: `linear-gradient(135deg, ${T.mint}, ${T.mint}DD)`, color: T.bg, fontWeight: "700", boxShadow: `0 0 16px ${T.mint}30`, padding: "11px 22px", borderRadius: "12px", fontSize: "13.5px" },
+    mint: { background: `linear-gradient(135deg, ${T.mint}, ${T.mint}DD)`, color: "#fff", fontWeight: "700", boxShadow: `0 0 16px ${T.mint}30`, padding: "11px 22px", borderRadius: "12px", fontSize: "13.5px" },
   };
   return <button onClick={onClick} disabled={disabled} aria-label={ariaLabel} style={{ ...btnBase, ...v[variant], opacity: disabled ? 0.4 : 1, minHeight: "44px", ...style }}>{children}</button>;
 }
 
 function Card({ children, style, glow, accent }) {
-  return <div style={{ background: T.bgCard, borderRadius: "16px", padding: "20px", border: `1px solid ${accent ? `${accent}25` : T.border}`, boxShadow: glow ? `0 0 24px ${glow}10, 0 2px 8px rgba(0,0,0,0.15)` : "0 2px 8px rgba(0,0,0,0.12)", transition: "all 0.2s", ...style }}>{children}</div>;
+  return <div style={{ background: T.bgCard, borderRadius: "16px", padding: "20px", border: `1px solid ${accent ? `${accent}25` : T.border}`, boxShadow: glow ? `0 0 24px ${glow}10, 0 2px 8px rgba(180,140,110,0.10)` : "0 2px 8px rgba(180,140,110,0.08)", transition: "all 0.2s", ...style }}>{children}</div>;
 }
 
 function Badge({ type = "neutral", children }) {
@@ -92,7 +103,7 @@ function Input({ value, onChange, placeholder, style }) {
 }
 
 function StyledSelect({ value, onChange, children, style }) {
-  return <select value={value} onChange={onChange} style={{ fontFamily: font, fontSize: "13px", fontWeight: "600", padding: "8px 30px 8px 12px", borderRadius: "8px", border: `1px solid ${T.border}`, background: T.bgInput, color: T.text, cursor: "pointer", minHeight: "44px", appearance: "none", WebkitAppearance: "none", colorScheme: "dark", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%237B8A9F' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center", ...style }}>{children}</select>;
+  return <select value={value} onChange={onChange} style={{ fontFamily: font, fontSize: "13px", fontWeight: "600", padding: "8px 30px 8px 12px", borderRadius: "8px", border: `1px solid ${T.border}`, background: T.bgInput, color: T.text, cursor: "pointer", minHeight: "44px", appearance: "none", WebkitAppearance: "none", colorScheme: "light", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239C8578' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center", ...style }}>{children}</select>;
 }
 
 function SectionHead({ icon, title, sub, right }) {
@@ -107,7 +118,8 @@ function SlotBar({ slotKey }) { return <div style={{ width: "4px", height: "28px
 
 // ─── MODALS ────────────────────────────────────────────────────────────────
 function Overlay({ children, onClose }) {
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(10,12,18,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px", backdropFilter: "blur(8px)" }}><div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: "540px", maxHeight: "92vh", overflowY: "auto" }}>{children}</div></div>;
+  const mobile = window.innerWidth < 480;
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(80,50,30,0.35)", display: "flex", alignItems: mobile ? "flex-end" : "center", justifyContent: "center", padding: mobile ? "0" : "16px", backdropFilter: "blur(8px)" }}><div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: mobile ? "100%" : "540px", maxHeight: mobile ? "95vh" : "92vh", overflowY: "auto", borderRadius: mobile ? "18px 18px 0 0" : undefined }}>{children}</div></div>;
 }
 
 function WelcomeModal({ onClose }) {
@@ -129,10 +141,11 @@ function ShareModal({ weeks, weekPlans, schedule, monthName, year, config, onClo
 }
 
 // ─── WEEK PLANNER ──────────────────────────────────────────────────────────
-function WeekPlanner({ weekIndex, weekDays, plan, config, onChange }) {
+function WeekPlanner({ weekIndex, weekDays, plan, config, onChange, isMobile }) {
   const defaultPlan = getDefaultWeekPlan(weekDays, config);
   const currentPlan = plan || defaultPlan;
   const allCanceled = SLOT_KEYS.every(sk => !currentPlan[sk]);
+  const [collapsed, setCollapsed] = useState(false);
 
   const shiftForward = () => {
     const newPlan = {};
@@ -172,9 +185,22 @@ function WeekPlanner({ weekIndex, weekDays, plan, config, onChange }) {
     onChange(newPlan);
   };
 
+  const startFrom = (startDate) => {
+    const startIdx = weekDays.findIndex(w => w.date === startDate);
+    onChange({
+      slot1: weekDays[startIdx]?.date || null,
+      slot2: weekDays[startIdx + 1]?.date || null,
+      slot3: weekDays[startIdx + 2]?.date || null,
+    });
+  };
+
   return (
     <Card style={{ marginBottom: "12px", padding: "16px" }} accent={allCanceled ? T.red : null}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+      {/* Header */}
+      <div
+        onClick={isMobile ? () => setCollapsed(c => !c) : undefined}
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: collapsed ? 0 : "12px", flexWrap: "wrap", gap: "8px", cursor: isMobile ? "pointer" : "default" }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontFamily: fontMono, fontSize: "11px", fontWeight: "700", color: T.textMuted, background: T.bgRaised, padding: "3px 8px", borderRadius: "6px", border: `1px solid ${T.border}` }}>WK{weekIndex + 1}</span>
           <span style={{ fontSize: "13px", color: T.textSoft }}>
@@ -182,33 +208,98 @@ function WeekPlanner({ weekIndex, weekDays, plan, config, onChange }) {
           </span>
           {allCanceled && <Badge type="error">CANCELED</Badge>}
         </div>
-        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-          <Btn variant="small" onClick={shiftBack} style={{ padding: "5px 10px", fontSize: "13px", minHeight: "36px", minWidth: "44px" }} aria-label="Shift week back">◀</Btn>
-          <Btn variant="small" onClick={shiftForward} style={{ padding: "5px 10px", fontSize: "13px", minHeight: "36px", minWidth: "44px" }} aria-label="Shift week forward">▶</Btn>
-          <Btn variant="small" onClick={resetDefault} style={{ minHeight: "36px" }}>Reset</Btn>
-          <Btn variant="small" onClick={cancelWeek} style={{ color: T.red, borderColor: `${T.red}30`, minHeight: "36px" }}>Cancel</Btn>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          {!allCanceled && !collapsed && <span style={{ fontSize: "11px", color: T.textFaint }}>
+            {SLOT_KEYS.filter(sk => currentPlan[sk]).map(sk => {
+              const d = weekDays.find(w => w.date === currentPlan[sk]);
+              return d ? getDayAbbr(d.dayName) : null;
+            }).filter(Boolean).join(" → ")}
+          </span>}
+          {isMobile && <span style={{ fontSize: "14px", color: T.textMuted, marginLeft: "4px" }}>{collapsed ? "▼" : "▲"}</span>}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-        {SLOT_KEYS.map(sk => {
-          const scenarios = config.slotScenarios[sk] || [];
-          const color = slotColors[sk];
-          const assigned = currentPlan[sk];
-          return (
-            <div key={sk} style={{ flex: "1 1 0", minWidth: "140px", padding: "10px 12px", borderRadius: "12px", border: `1.5px solid ${assigned ? `${color}35` : T.border}`, background: assigned ? `${color}08` : T.bgRaised }}>
-              <div style={{ fontSize: "11px", fontWeight: "700", color: color, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
-                {config.slotNames[sk]}
+      {!collapsed && <>
+        {/* "Start from" quick-pick row */}
+        <div style={{ marginBottom: "12px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "700", color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
+            Start training from:
+          </div>
+          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+            {weekDays.map(wd => {
+              const isCurrentStart = currentPlan.slot1 === wd.date;
+              return (
+                <button
+                  key={wd.date}
+                  onClick={() => startFrom(wd.date)}
+                  style={{
+                    ...btnBase,
+                    flex: "1 1 0",
+                    minWidth: "48px",
+                    minHeight: "40px",
+                    padding: "8px 4px",
+                    borderRadius: "10px",
+                    fontSize: "13px",
+                    fontWeight: isCurrentStart ? "800" : "600",
+                    background: isCurrentStart
+                      ? `linear-gradient(135deg, ${T.accent}, ${T.accentHover})`
+                      : T.bgRaised,
+                    color: isCurrentStart ? "#fff" : T.textSoft,
+                    border: isCurrentStart
+                      ? `2px solid ${T.accent}`
+                      : `1.5px solid ${T.border}`,
+                    boxShadow: isCurrentStart
+                      ? `0 0 12px ${T.accentGlow}`
+                      : "none",
+                  }}
+                >
+                  {getDayAbbr(wd.dayName)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Slot cards with day pills */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", flexDirection: isMobile ? "column" : "row" }}>
+          {SLOT_KEYS.map(sk => {
+            const scenarios = config.slotScenarios[sk] || [];
+            const color = slotColors[sk];
+            const assigned = currentPlan[sk];
+            const dayInfo = assigned ? weekDays.find(w => w.date === assigned) : null;
+            return (
+              <div key={sk} style={{ flex: "1 1 0", minWidth: isMobile ? "auto" : "140px", padding: "10px 12px", borderRadius: "12px", border: `1.5px solid ${assigned ? `${color}35` : T.border}`, background: assigned ? `${color}08` : T.bgRaised }}>
+                <div style={{ fontSize: "11px", fontWeight: "700", color: color, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>
+                  {config.slotNames[sk]}
+                </div>
+                {/* Day pill or Off state */}
+                {assigned && dayInfo ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: "10px", background: `${color}12`, border: `1.5px solid ${color}30`, marginBottom: "6px" }}>
+                    <span style={{ fontSize: "14px", fontWeight: "700", color: color }}>{getDayAbbr(dayInfo.dayName)} {fmtDate(assigned)}</span>
+                    <button onClick={() => assignSlotToDate(sk, "")} aria-label={`Cancel ${config.slotNames[sk]}`} style={{ ...btnBase, background: "none", fontSize: "14px", color: T.textMuted, padding: "2px 6px", minHeight: "28px", minWidth: "28px", borderRadius: "6px" }}>✕</button>
+                  </div>
+                ) : (
+                  <div style={{ padding: "8px 12px", borderRadius: "10px", background: T.redSoft, border: `1px solid ${T.red}20`, fontSize: "13px", fontWeight: "600", color: T.red, textAlign: "center", marginBottom: "6px" }}>Off</div>
+                )}
+                {/* Secondary dropdown for manual override */}
+                <StyledSelect value={assigned || ""} onChange={e => assignSlotToDate(sk, e.target.value)} style={{ width: "100%", fontSize: "11px", minHeight: "36px", padding: "6px 28px 6px 10px" }}>
+                  <option value="">— Off —</option>
+                  {weekDays.map(wd => <option key={wd.date} value={wd.date}>{getDayAbbr(wd.dayName)} {fmtDate(wd.date)}</option>)}
+                </StyledSelect>
+                <div style={{ fontSize: "10px", color: T.textFaint, marginTop: "4px" }}>{scenarios.map(s => `${config.scenarioIcons[s] || ""} ${s}`).join(", ")}</div>
               </div>
-              <StyledSelect value={assigned || ""} onChange={e => assignSlotToDate(sk, e.target.value)} style={{ width: "100%" }}>
-                <option value="">— Off —</option>
-                {weekDays.map(wd => <option key={wd.date} value={wd.date}>{getDayAbbr(wd.dayName)} {fmtDate(wd.date)}</option>)}
-              </StyledSelect>
-              <div style={{ fontSize: "10px", color: T.textFaint, marginTop: "4px" }}>{scenarios.map(s => `${config.scenarioIcons[s] || ""} ${s}`).join(", ")}</div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+
+        {/* Secondary controls */}
+        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "10px", justifyContent: "center" }}>
+          <Btn variant="small" onClick={shiftBack} style={{ padding: "5px 10px", fontSize: "12px", minHeight: "36px", minWidth: "44px" }} aria-label="Shift week back">◀ Shift</Btn>
+          <Btn variant="small" onClick={shiftForward} style={{ padding: "5px 10px", fontSize: "12px", minHeight: "36px", minWidth: "44px" }} aria-label="Shift week forward">Shift ▶</Btn>
+          <Btn variant="small" onClick={resetDefault} style={{ minHeight: "36px", fontSize: "12px" }}>Reset</Btn>
+          <Btn variant="small" onClick={cancelWeek} style={{ color: T.red, borderColor: `${T.red}30`, minHeight: "36px", fontSize: "12px" }}>Cancel Week</Btn>
+        </div>
+      </>}
     </Card>
   );
 }
@@ -289,6 +380,7 @@ function SettingsPanel({ config, onSave, onClose, showToast }) {
 
 // ─── MAIN ──────────────────────────────────────────────────────────────────
 export default function CITScheduler() {
+  const bp = useBreakpoint();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() === 11 ? 0 : now.getMonth() + 1);
   const [year, setYear] = useState(now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear());
@@ -463,7 +555,7 @@ export default function CITScheduler() {
       {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
       {showShare && schedule && <ShareModal weeks={weeks} weekPlans={weekPlans} schedule={schedule} monthName={monthName} year={year} config={config} onClose={() => setShowShare(false)} showToast={showT} />}
       {showSettings && <SettingsPanel config={config} onSave={saveConfig} onClose={() => setShowSettings(false)} showToast={showT} />}
-      {toast && <div style={{ position: "fixed", top: "80px", left: "50%", transform: "translateX(-50%)", zIndex: 999, padding: "10px 22px", borderRadius: "12px", fontFamily: font, fontSize: "13px", fontWeight: "700", background: toast.type === "success" ? T.green : toast.type === "warning" ? T.amber : toast.type === "error" ? T.red : T.accent, color: T.bg, boxShadow: `0 0 20px ${(toast.type === "success" ? T.green : T.accent)}40`, animation: "slideDown .3s ease", letterSpacing: "0.02em" }}>{toast.msg}</div>}
+      {toast && <div style={{ position: "fixed", top: "80px", left: "50%", transform: "translateX(-50%)", zIndex: 999, padding: "10px 22px", borderRadius: "12px", fontFamily: font, fontSize: "13px", fontWeight: "700", background: toast.type === "success" ? T.green : toast.type === "warning" ? T.amber : toast.type === "error" ? T.red : T.accent, color: "#fff", boxShadow: `0 0 20px ${(toast.type === "success" ? T.green : T.accent)}40`, animation: "slideDown .3s ease", letterSpacing: "0.02em" }}>{toast.msg}</div>}
 
       {/* HEADER */}
       <div style={{ background: `linear-gradient(180deg, ${T.bgRaised} 0%, ${T.bg} 100%)`, borderBottom: `1px solid ${T.border}`, padding: "16px 20px" }}>
@@ -480,7 +572,7 @@ export default function CITScheduler() {
           </div>
           <button onClick={() => chgMonth(1)} aria-label="Next month" style={{ ...btnBase, background: "none", fontSize: "22px", color: T.textMuted, padding: "4px 10px", minHeight: "44px", minWidth: "44px" }}>›</button>
         </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: "32px", padding: "6px 0" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: bp.isMobile ? "16px" : "32px", padding: "6px 0" }}>
           <StatBox value={weeks.length} label="Weeks" color={T.accent} />
           <StatBox value={activeDates.length} label="Active" color={T.mint} />
           <StatBox value={schedule ? `${filledSlots}/${totalSlots}` : "—"} label="Filled" color={filledSlots === totalSlots ? T.green : T.amber} />
@@ -488,11 +580,11 @@ export default function CITScheduler() {
       </div>
 
       {/* NAV */}
-      <div role="tablist" style={{ display: "flex", gap: "4px", padding: "10px 12px", overflowX: "auto", borderBottom: `1px solid ${T.border}`, background: T.bgCard }}>
+      <div role="tablist" style={{ display: "flex", gap: "4px", padding: bp.isMobile ? "8px 8px" : "10px 12px", overflowX: "auto", borderBottom: `1px solid ${T.border}`, background: T.bgCard }}>
         {navItems.map(n => <button key={n.key} role="tab" aria-selected={view === n.key} onClick={() => setView(n.key)} style={{ ...btnBase, padding: "8px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", whiteSpace: "nowrap", letterSpacing: "0.03em", background: view === n.key ? `linear-gradient(135deg,${T.accent},${T.accentHover})` : "transparent", color: view === n.key ? "#fff" : T.textMuted, boxShadow: view === n.key ? `0 0 14px ${T.accentGlow}` : "none", minHeight: "44px" }}>{n.icon} {n.label}</button>)}
       </div>
 
-      <div style={{ padding: "16px", maxWidth: "720px", margin: "0 auto" }}>
+      <div style={{ padding: bp.isMobile ? "12px" : "16px", maxWidth: bp.isWide ? "960px" : bp.isDesktop ? "800px" : "720px", margin: "0 auto" }}>
 
         {/* ═══ PLAN TAB ═══ */}
         {view === "plan" && <div>
@@ -502,7 +594,7 @@ export default function CITScheduler() {
               <strong>◀ ▶</strong> shifts all 3 days forward/back by one day. Use dropdowns for individual day changes. <strong>Cancel</strong> removes the entire week.
             </p>
           </Card>
-          {weeks.map((wd, wi) => <WeekPlanner key={wi} weekIndex={wi} weekDays={wd} plan={weekPlans[`week${wi}`]} config={config} onChange={plan => updateWeekPlan(wi, plan)} />)}
+          {weeks.map((wd, wi) => <WeekPlanner key={wi} weekIndex={wi} weekDays={wd} plan={weekPlans[`week${wi}`]} config={config} onChange={plan => updateWeekPlan(wi, plan)} isMobile={bp.isMobile} />)}
           <div style={{ marginTop: "20px", textAlign: "center" }}>
             <p style={{ fontSize: "13px", color: T.textMuted, marginBottom: "12px" }}>Once your days are set, go to <strong style={{ color: T.text }}>Actors</strong> to mark availability.</p>
             <Btn onClick={() => setView("availability")}>📋 Set Availability →</Btn>
@@ -539,7 +631,7 @@ export default function CITScheduler() {
             </div>;
           })}
           <div style={{ height: "80px" }} />
-          <div style={{ position: "sticky", bottom: "16px", textAlign: "center", padding: "12px 8px", background: `linear-gradient(to top, ${T.bg} 60%, transparent)`, borderRadius: "16px" }}><Btn onClick={handleGenerate} disabled={generating} style={{ width: "100%", maxWidth: "400px", padding: "16px", fontSize: "15px", borderRadius: "14px", boxShadow: `0 0 32px ${T.accentGlow}, 0 4px 12px rgba(0,0,0,0.3)` }}>{generating ? "Generating..." : "⚡ Generate Schedule"}</Btn></div>
+          <div style={{ position: "sticky", bottom: "16px", textAlign: "center", padding: "12px 8px", background: `linear-gradient(to top, ${T.bg} 60%, transparent)`, borderRadius: "16px" }}><Btn onClick={handleGenerate} disabled={generating} style={{ width: "100%", maxWidth: "400px", padding: "16px", fontSize: "15px", borderRadius: "14px", boxShadow: `0 0 32px ${T.accentGlow}, 0 4px 12px rgba(180,140,110,0.15)` }}>{generating ? "Generating..." : "⚡ Generate Schedule"}</Btn></div>
         </div>}
 
         {/* ═══ SCHEDULE TAB ═══ */}
@@ -614,7 +706,7 @@ export default function CITScheduler() {
         @media(prefers-reduced-motion:reduce){*{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
         select:focus,button:focus{outline:2px solid ${T.accent}40;outline-offset:2px}
         button:active{transform:scale(0.97)}
-        select{color-scheme:dark}
+        select{color-scheme:light}
         option{background:${T.bgInput};color:${T.text}}
         ::-webkit-scrollbar{width:6px;height:6px}
         ::-webkit-scrollbar-track{background:${T.bg}}

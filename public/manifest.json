@@ -4,8 +4,8 @@
   "description": "NYPD Crisis Intervention Training actor scheduling tool",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#13161C",
-  "theme_color": "#13161C",
+  "background_color": "#FFF8F0",
+  "theme_color": "#FFF8F0",
   "orientation": "portrait-primary",
   "icons": [
     {
