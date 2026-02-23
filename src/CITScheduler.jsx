@@ -488,10 +488,15 @@ function PasteMessagePanel({ config, availability, activeDates, onApply, onClose
     } else if (/available all month|can do everything|all month/i.test(text)) {
       result.available = true;
     }
-    if (/am only|mornings? only|noon only|morning shift/i.test(text)) result.shift = "am";
-    else if (/pm only|evenings? only|8 ?pm only|evening shift/i.test(text)) result.shift = "pm";
-    else if (/no pm|not pm|not evenings?/i.test(text)) result.shift = "am";
-    else if (/no am|not am|not mornings?/i.test(text)) result.shift = "pm";
+    // Negation patterns first (can't do X, no X, not X)
+    if (/no pm|not pm|not evenings?|can'?t do (?:the )?pm|can'?t do (?:the )?evenings?/i.test(text)) result.shift = "am";
+    else if (/no am|not am|not mornings?|can'?t do (?:the )?am|can'?t do (?:the )?mornings?|can'?t do (?:the )?noon/i.test(text)) result.shift = "pm";
+    // Explicit patterns (X only, only X, just X)
+    else if (/am only|only am|mornings? only|only mornings?|noon only|only noon|morning shift|just (?:the )?mornings?/i.test(text)) result.shift = "am";
+    else if (/pm only|only pm|evenings? only|only evenings?|8 ?pm only|only 8 ?pm|evening shift|just (?:the )?evenings?/i.test(text)) result.shift = "pm";
+    // Standalone keyword (only if the other shift isn't mentioned)
+    else if (/(?:^|\W)mornings?(?:\W|$)/i.test(text) && !/pm|evening/i.test(text)) result.shift = "am";
+    else if (/(?:^|\W)evenings?(?:\W|$)/i.test(text) && !/am|morning|noon/i.test(text)) result.shift = "pm";
     const dayPatterns = [{ rx: /mondays?/i, day: "Monday" }, { rx: /tuesdays?/i, day: "Tuesday" }, { rx: /wednesdays?/i, day: "Wednesday" }, { rx: /thursdays?/i, day: "Thursday" }, { rx: /fridays?/i, day: "Friday" }];
     result.days = dayPatterns.filter(d => d.rx.test(text)).map(d => d.day);
     (text.match(/except (?:the )?(\d+)(?:st|nd|rd|th)?/gi) || []).forEach(m => {
@@ -546,6 +551,7 @@ export default function CITScheduler() {
   const [errors, setErrors] = useState([]);
   const [view, setView] = useState("plan");
   const [overrides, setOverrides] = useState({});
+  const [activeActors, setActiveActors] = useState({});
   const [loading, setLoading] = useState(true);
   const [showWelcome, setShowWelcome] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -583,17 +589,18 @@ export default function CITScheduler() {
           setSchedule(d.schedule || null);
           setErrors(d.errors || []);
           setOverrides(d.overrides || {});
+          setActiveActors(d.activeActors || {});
           setFairnessReport(d.fairnessReport || null);
         } else {
-          setAvailability({}); setWeekPlans({}); setSchedule(null); setErrors([]); setOverrides({}); setFairnessReport(null);
+          setAvailability({}); setWeekPlans({}); setSchedule(null); setErrors([]); setOverrides({}); setActiveActors({}); setFairnessReport(null);
         }
-      } catch { setAvailability({}); setWeekPlans({}); setSchedule(null); setErrors([]); setOverrides({}); setFairnessReport(null) }
+      } catch { setAvailability({}); setWeekPlans({}); setSchedule(null); setErrors([]); setOverrides({}); setActiveActors({}); setFairnessReport(null) }
       setLoading(false);
     })()
   }, [sKey]);
 
-  const save = useCallback(async (a, wp, s, e, o, fr) => {
-    try { await storage.set(sKey, JSON.stringify({ availability: a, weekPlans: wp, schedule: s, errors: e, overrides: o, fairnessReport: fr || null })) }
+  const save = useCallback(async (a, wp, s, e, o, fr, aa) => {
+    try { await storage.set(sKey, JSON.stringify({ availability: a, weekPlans: wp, schedule: s, errors: e, overrides: o, fairnessReport: fr || null, activeActors: aa || {} })) }
     catch (err) { console.error(err) }
   }, [sKey]);
 
@@ -614,21 +621,21 @@ export default function CITScheduler() {
       else if (norm === "am") next = "pm";
       else next = false;
       const n = { ...p, [ds]: { ...p[ds], [actor]: next } };
-      save(n, weekPlans, schedule, errors, overrides);
+      save(n, weekPlans, schedule, errors, overrides, fairnessReport, activeActors);
       return n;
     });
   };
   const setAllAvail = ds => {
-    setAvailability(p => { const n = { ...p, [ds]: {} }; config.actors.forEach(a => n[ds][a] = "both"); save(n, weekPlans, schedule, errors, overrides); return n });
+    setAvailability(p => { const n = { ...p, [ds]: {} }; config.actors.forEach(a => n[ds][a] = "both"); save(n, weekPlans, schedule, errors, overrides, fairnessReport, activeActors); return n });
   };
   const setAllAM = ds => {
-    setAvailability(p => { const n = { ...p, [ds]: {} }; config.actors.forEach(a => n[ds][a] = "am"); save(n, weekPlans, schedule, errors, overrides); return n });
+    setAvailability(p => { const n = { ...p, [ds]: {} }; config.actors.forEach(a => n[ds][a] = "am"); save(n, weekPlans, schedule, errors, overrides, fairnessReport, activeActors); return n });
   };
   const setAllPM = ds => {
-    setAvailability(p => { const n = { ...p, [ds]: {} }; config.actors.forEach(a => n[ds][a] = "pm"); save(n, weekPlans, schedule, errors, overrides); return n });
+    setAvailability(p => { const n = { ...p, [ds]: {} }; config.actors.forEach(a => n[ds][a] = "pm"); save(n, weekPlans, schedule, errors, overrides, fairnessReport, activeActors); return n });
   };
   const clearDay = ds => {
-    setAvailability(p => { const n = { ...p, [ds]: {} }; save(n, weekPlans, schedule, errors, overrides); return n });
+    setAvailability(p => { const n = { ...p, [ds]: {} }; save(n, weekPlans, schedule, errors, overrides, fairnessReport, activeActors); return n });
   };
 
   const copyFromLastMonth = async () => {
@@ -661,7 +668,7 @@ export default function CITScheduler() {
         if (prevByDow[dow]) newAvail[ds] = { ...prevByDow[dow] };
       });
       setAvailability(newAvail);
-      save(newAvail, weekPlans, schedule, errors, overrides, fairnessReport);
+      save(newAvail, weekPlans, schedule, errors, overrides, fairnessReport, activeActors);
       showT("Copied from last month ✓", "success");
     } catch {
       showT("Could not load last month", "error");
@@ -669,15 +676,25 @@ export default function CITScheduler() {
   };
 
   const updateWeekPlan = (wi, plan) => {
-    setWeekPlans(p => { const n = { ...p, [`week${wi}`]: plan }; save(availability, n, schedule, errors, overrides, fairnessReport); return n });
+    setWeekPlans(p => { const n = { ...p, [`week${wi}`]: plan }; save(availability, n, schedule, errors, overrides, fairnessReport, activeActors); return n });
   };
 
   const handleGenerate = () => {
+    const active = config.actors.filter(a => activeActors[a]);
+    if (active.length === 0) { showT("No active actors — toggle at least one on", "error"); return; }
     setGenerating(true);
     setTimeout(() => {
-      const { schedule: s, errors: e, fairnessReport: fr } = generateSchedule(weeks, weekPlans, availability, config);
+      // Build a filtered config that only includes active actors
+      const filteredConfig = {
+        ...config,
+        actors: active,
+        scenarioActors: Object.fromEntries(
+          Object.entries(config.scenarioActors).map(([sc, actors]) => [sc, actors.filter(a => activeActors[a])])
+        ),
+      };
+      const { schedule: s, errors: e, fairnessReport: fr } = generateSchedule(weeks, weekPlans, availability, filteredConfig);
       setSchedule(s); setErrors(e); setFairnessReport(fr); setView("schedule");
-      save(availability, weekPlans, s, e, overrides, fr);
+      save(availability, weekPlans, s, e, overrides, fr, activeActors);
       setGenerating(false);
       if (!e.length) showT("All slots filled", "success");
       else showT(`${e.length} gap${e.length > 1 ? "s" : ""}—check schedule`, "warning");
@@ -691,7 +708,7 @@ export default function CITScheduler() {
       if (schedule) {
         const ns = JSON.parse(JSON.stringify(schedule));
         if (ns[wk]?.[sk]?.[shift]) ns[wk][sk][shift][sc] = actor || null;
-        setSchedule(ns); save(availability, weekPlans, ns, errors, n, fairnessReport);
+        setSchedule(ns); save(availability, weekPlans, ns, errors, n, fairnessReport, activeActors);
       }
       return n;
     });
@@ -730,7 +747,7 @@ export default function CITScheduler() {
       {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
       {showShare && schedule && <ShareModal weeks={weeks} weekPlans={weekPlans} schedule={schedule} monthName={monthName} year={year} config={config} onClose={() => setShowShare(false)} showToast={showT} />}
       {showSettings && <SettingsPanel config={config} onSave={saveConfig} onClose={() => setShowSettings(false)} showToast={showT} />}
-      {showPasteMsg && <PasteMessagePanel config={config} availability={availability} activeDates={activeDates} onApply={newAvail => { setAvailability(newAvail); save(newAvail, weekPlans, schedule, errors, overrides, fairnessReport); showT("Availability updated ✓", "success"); }} onClose={() => setShowPasteMsg(false)} />}
+      {showPasteMsg && <PasteMessagePanel config={config} availability={availability} activeDates={activeDates} onApply={newAvail => { setAvailability(newAvail); save(newAvail, weekPlans, schedule, errors, overrides, fairnessReport, activeActors); showT("Availability updated ✓", "success"); }} onClose={() => setShowPasteMsg(false)} />}
       {toast && <div style={{ position: "fixed", top: "80px", left: "50%", transform: "translateX(-50%)", zIndex: 999, padding: "10px 22px", borderRadius: "12px", fontFamily: font, fontSize: "13px", fontWeight: "700", background: toast.type === "success" ? T.green : toast.type === "warning" ? T.amber : toast.type === "error" ? T.red : T.accent, color: "#fff", boxShadow: `0 0 20px ${(toast.type === "success" ? T.green : T.accent)}40`, animation: "slideDown .3s ease", letterSpacing: "0.02em" }}>{toast.msg}</div>}
 
       {/* HEADER */}
@@ -780,6 +797,62 @@ export default function CITScheduler() {
         {/* ═══ AVAILABILITY TAB ═══ */}
         {view === "availability" && <div>
           <SectionHead icon="📋" title="Actor Availability" sub="Tap names to cycle: Both shifts → AM only → PM only → Off" right={<div style={{ display: "flex", gap: "6px" }}><Btn variant="small" onClick={() => setShowPasteMsg(true)} style={{ fontSize: "11px" }}>📩 Paste Message</Btn><Btn variant="small" onClick={copyFromLastMonth} style={{ fontSize: "11px" }}>📋 Copy Last Month</Btn></div>} />
+
+          {/* ── Active Actors Toggle ── */}
+          <Card style={{ marginBottom: "16px", padding: "16px" }} accent={T.accent}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+              <div>
+                <div style={{ fontWeight: "700", fontSize: "14px", color: T.text }}>Active This Month</div>
+                <div style={{ fontSize: "11px", color: T.textMuted }}>Only active actors get scheduled. Toggle each actor on/off.</div>
+              </div>
+              <Badge type={Object.values(activeActors).filter(Boolean).length > 0 ? "success" : "error"}>
+                {Object.values(activeActors).filter(Boolean).length}/{config.actors.length}
+              </Badge>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
+              {config.actors.map(actor => {
+                const isOn = !!activeActors[actor];
+                const cl = config.actorColors[actor] || T.accent;
+                return <button key={actor} onClick={() => {
+                  setActiveActors(p => {
+                    const n = { ...p, [actor]: !p[actor] };
+                    save(availability, weekPlans, schedule, errors, overrides, fairnessReport, n);
+                    return n;
+                  });
+                }} style={{
+                  ...btnBase,
+                  display: "inline-flex", alignItems: "center", gap: "6px",
+                  padding: "8px 14px", borderRadius: "10px", fontSize: "13px", fontWeight: isOn ? "700" : "400",
+                  background: isOn ? `${cl}18` : T.bgRaised,
+                  border: `2px solid ${isOn ? cl : T.border}`,
+                  color: isOn ? cl : T.textFaint,
+                  opacity: isOn ? 1 : 0.5,
+                  minHeight: "40px",
+                }}>
+                  {isOn && <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: cl, boxShadow: `0 0 8px ${cl}60` }} />}
+                  {actor}
+                  {isOn ? " ON" : " off"}
+                </button>;
+              })}
+            </div>
+            <div style={{ display: "flex", gap: "6px" }}>
+              <Btn variant="small" onClick={() => {
+                setActiveActors(() => {
+                  const n = Object.fromEntries(config.actors.map(a => [a, true]));
+                  save(availability, weekPlans, schedule, errors, overrides, fairnessReport, n);
+                  return n;
+                });
+              }} style={{ minHeight: "36px" }}>All On</Btn>
+              <Btn variant="small" onClick={() => {
+                setActiveActors(() => {
+                  const n = {};
+                  save(availability, weekPlans, schedule, errors, overrides, fairnessReport, n);
+                  return n;
+                });
+              }} style={{ minHeight: "36px" }}>All Off</Btn>
+            </div>
+          </Card>
+
           {weeks.map((wd, wi) => {
             const plan = weekPlans[`week${wi}`] || getDefaultWeekPlan(wd, config);
             const activeSlots = SLOT_KEYS.filter(sk => plan[sk]);
@@ -801,10 +874,11 @@ export default function CITScheduler() {
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
                     {config.actors.map(actor => {
                       const norm = normalizeAvail(availability[ds]?.[actor]);
-                      const isActive = !!norm;
+                      const isAvail = !!norm;
+                      const isActorActive = !!activeActors[actor];
                       const badge = norm === "am" ? " ☀️" : norm === "pm" ? " 🌙" : "";
                       const chipColor = norm === "am" ? T.sunGold : norm === "pm" ? T.nightIndigo : config.actorColors[actor];
-                      return <Chip key={actor} active={isActive} dimmed={!approvedSet.has(actor)} color={chipColor} onClick={() => cycleAvailability(ds, actor)}>{actor}{badge}</Chip>;
+                      return <Chip key={actor} active={isAvail} dimmed={!approvedSet.has(actor) || !isActorActive} color={chipColor} onClick={() => cycleAvailability(ds, actor)}>{!isActorActive && <span style={{ fontSize: "10px", opacity: 0.6 }}>⊘</span>}{actor}{badge}</Chip>;
                     })}
                   </div>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
