@@ -482,26 +482,64 @@ function PasteMessagePanel({ config, availability, activeDates, onApply, onClose
   const [preview, setPreview] = useState(null);
 
   const parseMessage = () => {
-    const result = { shift: null, days: [], excludeDates: [], available: null };
-    if (/unavailable|not available|out this month|won't be/i.test(text)) {
+    const result = { shift: null, days: [], excludeDates: [], available: null, perDate: false, dateShifts: {} };
+    // Normalize a.m./p.m. to am/pm
+    const normalized = text.replace(/a\.m\./gi, 'am').replace(/p\.m\./gi, 'pm');
+
+    if (/unavailable|not available|out this month|won't be/i.test(normalized)) {
       result.available = false;
-    } else if (/available all month|can do everything|all month/i.test(text)) {
+      setPreview(result);
+      return;
+    }
+    if (/available all month|can do everything|all month/i.test(normalized) && !/\d{1,2}(?:st|nd|rd|th)/i.test(normalized)) {
       result.available = true;
     }
-    // Negation patterns first (can't do X, no X, not X)
-    if (/no pm|not pm|not evenings?|can'?t do (?:the )?pm|can'?t do (?:the )?evenings?/i.test(text)) result.shift = "am";
-    else if (/no am|not am|not mornings?|can'?t do (?:the )?am|can'?t do (?:the )?mornings?|can'?t do (?:the )?noon/i.test(text)) result.shift = "pm";
-    // Explicit patterns (X only, only X, just X)
-    else if (/am only|only am|mornings? only|only mornings?|noon only|only noon|morning shift|just (?:the )?mornings?/i.test(text)) result.shift = "am";
-    else if (/pm only|only pm|evenings? only|only evenings?|8 ?pm only|only 8 ?pm|evening shift|just (?:the )?evenings?/i.test(text)) result.shift = "pm";
-    // Standalone keyword (only if the other shift isn't mentioned)
-    else if (/(?:^|\W)mornings?(?:\W|$)/i.test(text) && !/pm|evening/i.test(text)) result.shift = "am";
-    else if (/(?:^|\W)evenings?(?:\W|$)/i.test(text) && !/am|morning|noon/i.test(text)) result.shift = "pm";
-    const dayPatterns = [{ rx: /mondays?/i, day: "Monday" }, { rx: /tuesdays?/i, day: "Tuesday" }, { rx: /wednesdays?/i, day: "Wednesday" }, { rx: /thursdays?/i, day: "Thursday" }, { rx: /fridays?/i, day: "Friday" }];
-    result.days = dayPatterns.filter(d => d.rx.test(text)).map(d => d.day);
-    (text.match(/except (?:the )?(\d+)(?:st|nd|rd|th)?/gi) || []).forEach(m => {
-      const n = m.match(/\d+/); if (n) result.excludeDates.push(parseInt(n[0]));
-    });
+
+    // If message has specific date ordinals (3rd, 11th, etc.) → per-date mode
+    const hasSpecificDates = /\d{1,2}(?:st|nd|rd|th)/i.test(normalized);
+
+    if (hasSpecificDates) {
+      result.perDate = true;
+      const curMonth = activeDates.length > 0 ? parseInt(activeDates[0].split('-')[1]) - 1 : new Date().getMonth();
+      const monthNames = { january:0, february:1, march:2, april:3, may:4, june:5, july:6, august:7, september:8, october:9, november:10, december:11 };
+
+      // Split into sentences by period
+      const sentences = normalized.split(/\./).map(s => s.trim()).filter(Boolean);
+      let currentShift = "both";
+
+      for (const sentence of sentences) {
+        // Detect shift declaration in this sentence
+        if (/\bam\s+and\s+pm\b|\bpm\s+and\s+am\b|\bboth\s+shifts?\b/i.test(sentence)) currentShift = "both";
+        else if (/\bpm\s+only\b|\bonly\s+pm\b|\bevenings?\s+only\b|\bonly\s+evenings?\b/i.test(sentence)) currentShift = "pm";
+        else if (/\bam\s+only\b|\bonly\s+am\b|\bmornings?\s+only\b|\bonly\s+mornings?\b/i.test(sentence)) currentShift = "am";
+        // If no shift keyword in this sentence, currentShift carries over
+
+        // Extract dates with month awareness (skip dates belonging to other months)
+        const tokens = sentence.split(/[\s,]+/);
+        let activeMonth = curMonth;
+        for (const token of tokens) {
+          const clean = token.toLowerCase().replace(/[^a-z]/g, '');
+          if (monthNames[clean] !== undefined) { activeMonth = monthNames[clean]; continue; }
+          const dm = token.match(/(\d{1,2})(?:st|nd|rd|th)/i);
+          if (dm && activeMonth === curMonth) {
+            result.dateShifts[parseInt(dm[1])] = currentShift;
+          }
+        }
+      }
+    } else {
+      // Simple mode — day-of-week + single shift for all dates
+      if (/no pm|not pm|not evenings?|can'?t do (?:the )?pm|can'?t do (?:the )?evenings?/i.test(normalized)) result.shift = "am";
+      else if (/no am|not am|not mornings?|can'?t do (?:the )?am|can'?t do (?:the )?mornings?|can'?t do (?:the )?noon/i.test(normalized)) result.shift = "pm";
+      else if (/am only|only am|mornings? only|only mornings?|noon only|only noon|morning shift|just (?:the )?mornings?/i.test(normalized)) result.shift = "am";
+      else if (/pm only|only pm|evenings? only|only evenings?|8 ?pm only|only 8 ?pm|evening shift|just (?:the )?evenings?/i.test(normalized)) result.shift = "pm";
+      else if (/(?:^|\W)mornings?(?:\W|$)/i.test(normalized) && !/pm|evening/i.test(normalized)) result.shift = "am";
+      else if (/(?:^|\W)evenings?(?:\W|$)/i.test(normalized) && !/am|morning|noon/i.test(normalized)) result.shift = "pm";
+      const dayPatterns = [{ rx: /mondays?/i, day: "Monday" }, { rx: /tuesdays?/i, day: "Tuesday" }, { rx: /wednesdays?/i, day: "Wednesday" }, { rx: /thursdays?/i, day: "Thursday" }, { rx: /fridays?/i, day: "Friday" }];
+      result.days = dayPatterns.filter(d => d.rx.test(normalized)).map(d => d.day);
+      (normalized.match(/except (?:the )?(\d+)(?:st|nd|rd|th)?/gi) || []).forEach(m => {
+        const n = m.match(/\d+/); if (n) result.excludeDates.push(parseInt(n[0]));
+      });
+    }
     setPreview(result);
   };
 
@@ -513,20 +551,37 @@ function PasteMessagePanel({ config, availability, activeDates, onApply, onClose
       const date = new Date(y, m - 1, d);
       const dayName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][date.getDay()];
       if (!newAvail[ds]) newAvail[ds] = {};
-      if (preview.excludeDates.includes(d)) { newAvail[ds][actor] = false; return; }
-      if (preview.available === false) { newAvail[ds][actor] = false; return; }
-      if (preview.days.length > 0 && !preview.days.includes(dayName)) { newAvail[ds][actor] = false; return; }
-      newAvail[ds][actor] = preview.shift === "am" ? "am" : preview.shift === "pm" ? "pm" : "both";
+      if (preview.perDate) {
+        const shift = preview.dateShifts[d];
+        newAvail[ds][actor] = shift !== undefined ? shift : false;
+      } else {
+        if (preview.excludeDates.includes(d)) { newAvail[ds][actor] = false; return; }
+        if (preview.available === false) { newAvail[ds][actor] = false; return; }
+        if (preview.days.length > 0 && !preview.days.includes(dayName)) { newAvail[ds][actor] = false; return; }
+        newAvail[ds][actor] = preview.shift === "am" ? "am" : preview.shift === "pm" ? "pm" : "both";
+      }
     });
     onApply(newAvail);
     onClose();
   };
 
-  const summaryLines = preview ? (preview.available === false ? ["❌ Unavailable all month"] : [
-    preview.days.length > 0 ? `📅 Days: ${preview.days.join(", ")} only` : "📅 Days: all training days",
-    preview.shift === "am" ? "☀️ Shift: AM only" : preview.shift === "pm" ? "🌙 Shift: PM only" : "🔄 Shift: both AM and PM",
-    ...(preview.excludeDates.length > 0 ? [`🚫 Exclude: ${preview.excludeDates.map(d => `the ${d}th`).join(", ")}`] : []),
-  ]) : [];
+  const ord = n => { const s = ["th","st","nd","rd"]; const v = n % 100; return n + (s[(v-20)%10]||s[v]||s[0]); };
+  const summaryLines = preview ? (preview.available === false ? ["❌ Unavailable all month"] :
+    preview.perDate ? (() => {
+      const groups = {};
+      Object.entries(preview.dateShifts).forEach(([d, shift]) => { (groups[shift] = groups[shift] || []).push(parseInt(d)); });
+      const lines = [];
+      if (groups.both) lines.push(`🔄 Both AM+PM: ${groups.both.sort((a,b)=>a-b).map(ord).join(", ")}`);
+      if (groups.am) lines.push(`☀️ AM only: ${groups.am.sort((a,b)=>a-b).map(ord).join(", ")}`);
+      if (groups.pm) lines.push(`🌙 PM only: ${groups.pm.sort((a,b)=>a-b).map(ord).join(", ")}`);
+      lines.push("❌ All other dates: Off");
+      return lines;
+    })() : [
+      preview.days.length > 0 ? `📅 Days: ${preview.days.join(", ")} only` : "📅 Days: all training days",
+      preview.shift === "am" ? "☀️ Shift: AM only" : preview.shift === "pm" ? "🌙 Shift: PM only" : "🔄 Shift: both AM and PM",
+      ...(preview.excludeDates.length > 0 ? [`🚫 Exclude: ${preview.excludeDates.map(d => `the ${d}th`).join(", ")}`] : []),
+    ]
+  ) : [];
 
   return <Overlay onClose={onClose}><Card style={{ padding: "24px" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}><h2 style={{ fontFamily: font, fontSize: "18px", fontWeight: "800", margin: 0, color: T.text }}>📩 Paste Availability</h2><button onClick={onClose} aria-label="Close" style={{ ...btnBase, background: "none", fontSize: "20px", color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>✕</button></div>
