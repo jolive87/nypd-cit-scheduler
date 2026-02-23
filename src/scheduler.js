@@ -152,6 +152,32 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     }
   }
 
+  // ── Pre-compute fairness metrics ──────────────────────────────────────────
+  const activeActors = config.actors.filter(a => eligibleCount[a] > 0);
+  const fairTarget = activeActors.length > 0 ? allSlots.length / activeActors.length : 0;
+
+  const flexibility = {};
+  let maxFlex = 0;
+  for (const actor of config.actors) {
+    const approved = Object.entries(scenarioActors)
+      .filter(([, actors]) => actors.includes(actor))
+      .map(([sc]) => sc);
+    if (approved.length === 0 || eligibleCount[actor] === 0) {
+      flexibility[actor] = 0;
+      continue;
+    }
+    const compCounts = approved.map(sc =>
+      (scenarioActors[sc] || []).filter(a => a !== actor && eligibleCount[a] > 0).length
+    );
+    const avgComp = compCounts.reduce((s, c) => s + c, 0) / compCounts.length;
+    flexibility[actor] = approved.length * (1 + avgComp);
+    if (flexibility[actor] > maxFlex) maxFlex = flexibility[actor];
+  }
+  const normFlex = {};
+  for (const actor of config.actors) {
+    normFlex[actor] = maxFlex > 0 ? flexibility[actor] / maxFlex : 0;
+  }
+
   // ── State management ───────────────────────────────────────────────────────
   function freshState() {
     const sched = {};
@@ -220,14 +246,12 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
 
   function rankCandidates(candidates, shift, state) {
     return [...candidates].sort((a, b) => {
-      const ud = state.usageCount[a] - state.usageCount[b];
-      if (ud !== 0) return ud;
-      if (shift === 'PM') {
-        const pa = config.actorConstraints?.[a]?.preferAM ? 1 : 0;
-        const pb = config.actorConstraints?.[b]?.preferAM ? 1 : 0;
-        if (pa !== pb) return pa - pb;
-      }
-      return eligibleCount[a] - eligibleCount[b];
+      const pa = -(fairTarget - state.usageCount[a]) + normFlex[a] * 0.8
+        + (shift === 'PM' && config.actorConstraints?.[a]?.preferAM ? 0.3 : 0);
+      const pb = -(fairTarget - state.usageCount[b]) + normFlex[b] * 0.8
+        + (shift === 'PM' && config.actorConstraints?.[b]?.preferAM ? 0.3 : 0);
+      if (pa !== pb) return pa - pb;
+      return a.localeCompare(b);
     });
   }
 
@@ -266,11 +290,69 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     return false;
   }
 
+  // ── Fairness report builder ─────────────────────────────────────────────
+  function buildFairnessReport(state) {
+    const totalScenarios = Object.keys(scenarioActors).length;
+    const report = {
+      fairTarget: Math.round(fairTarget * 10) / 10,
+      totalSlots: allSlots.length,
+      actors: {},
+      overallFairness: 0,
+    };
+    let totalDev = 0;
+    for (const actor of config.actors) {
+      const usage = state.usageCount[actor];
+      const gap = Math.round((usage - fairTarget) * 10) / 10;
+      const absGap = Math.abs(gap);
+      totalDev += absGap;
+      let gapCategory = 'fair';
+      let gapExplanation = null;
+      if (gap < -1.5) {
+        const scCount = Object.entries(scenarioActors)
+          .filter(([, a]) => a.includes(actor)).length;
+        const ac = config.actorConstraints?.[actor];
+        const reasons = [];
+        if (scCount <= 3) {
+          const scNames = Object.entries(scenarioActors)
+            .filter(([, a]) => a.includes(actor)).map(([sc]) => sc);
+          reasons.push(`Only approved for ${scCount}/${totalScenarios} scenarios (${scNames.join(', ')})`);
+        }
+        if (ac?.allowedDays?.length > 0)
+          reasons.push(`Only available ${ac.allowedDays.join(', ')}`);
+        if (ac?.maxPMRatio != null && ac.maxPMRatio < 0.5)
+          reasons.push(`PM capped at ${Math.round(ac.maxPMRatio * 100)}%`);
+        if (eligibleCount[actor] < fairTarget * 2)
+          gapCategory = 'under_structural';
+        else
+          gapCategory = 'under_algorithmic';
+        gapExplanation = reasons.length > 0
+          ? reasons.join('; ')
+          : 'Limited availability reduces scheduling options';
+      } else if (gap > 1.5) {
+        gapCategory = 'over';
+        gapExplanation = 'Above target to cover scenario needs';
+      }
+      report.actors[actor] = {
+        assigned: usage,
+        target: report.fairTarget,
+        gap,
+        gapCategory,
+        gapExplanation,
+        scenarioCount: Object.entries(scenarioActors)
+          .filter(([, a]) => a.includes(actor)).length,
+        eligibleSlots: eligibleCount[actor],
+      };
+    }
+    const maxDev = allSlots.length || 1;
+    report.overallFairness = Math.round((1 - totalDev / maxDev) * 100);
+    return report;
+  }
+
   // ── Try backtracking at each relaxation level ─────────────────────────────
   for (let relaxLevel = 0; relaxLevel <= 3; relaxLevel++) {
     const state = freshState();
     if (backtrack([...allSlots], 0, state, relaxLevel)) {
-      return { schedule: state.schedule, errors: [] };
+      return { schedule: state.schedule, errors: [], fairnessReport: buildFairnessReport(state) };
     }
   }
 
@@ -347,7 +429,7 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     }
   }
 
-  return { schedule: fbState.schedule, errors };
+  return { schedule: fbState.schedule, errors, fairnessReport: buildFairnessReport(fbState) };
 }
 
 /**

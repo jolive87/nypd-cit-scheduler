@@ -554,6 +554,7 @@ export default function CITScheduler() {
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showPasteMsg, setShowPasteMsg] = useState(false);
+  const [fairnessReport, setFairnessReport] = useState(null);
 
   const weeks = getWeeksInMonth(year, month);
   const monthName = new Date(year, month).toLocaleString('default', { month: 'long' });
@@ -582,16 +583,17 @@ export default function CITScheduler() {
           setSchedule(d.schedule || null);
           setErrors(d.errors || []);
           setOverrides(d.overrides || {});
+          setFairnessReport(d.fairnessReport || null);
         } else {
-          setAvailability({}); setWeekPlans({}); setSchedule(null); setErrors([]); setOverrides({});
+          setAvailability({}); setWeekPlans({}); setSchedule(null); setErrors([]); setOverrides({}); setFairnessReport(null);
         }
-      } catch { setAvailability({}); setWeekPlans({}); setSchedule(null); setErrors([]); setOverrides({}) }
+      } catch { setAvailability({}); setWeekPlans({}); setSchedule(null); setErrors([]); setOverrides({}); setFairnessReport(null) }
       setLoading(false);
     })()
   }, [sKey]);
 
-  const save = useCallback(async (a, wp, s, e, o) => {
-    try { await storage.set(sKey, JSON.stringify({ availability: a, weekPlans: wp, schedule: s, errors: e, overrides: o })) }
+  const save = useCallback(async (a, wp, s, e, o, fr) => {
+    try { await storage.set(sKey, JSON.stringify({ availability: a, weekPlans: wp, schedule: s, errors: e, overrides: o, fairnessReport: fr || null })) }
     catch (err) { console.error(err) }
   }, [sKey]);
 
@@ -659,7 +661,7 @@ export default function CITScheduler() {
         if (prevByDow[dow]) newAvail[ds] = { ...prevByDow[dow] };
       });
       setAvailability(newAvail);
-      save(newAvail, weekPlans, schedule, errors, overrides);
+      save(newAvail, weekPlans, schedule, errors, overrides, fairnessReport);
       showT("Copied from last month ✓", "success");
     } catch {
       showT("Could not load last month", "error");
@@ -667,15 +669,15 @@ export default function CITScheduler() {
   };
 
   const updateWeekPlan = (wi, plan) => {
-    setWeekPlans(p => { const n = { ...p, [`week${wi}`]: plan }; save(availability, n, schedule, errors, overrides); return n });
+    setWeekPlans(p => { const n = { ...p, [`week${wi}`]: plan }; save(availability, n, schedule, errors, overrides, fairnessReport); return n });
   };
 
   const handleGenerate = () => {
     setGenerating(true);
     setTimeout(() => {
-      const { schedule: s, errors: e } = generateSchedule(weeks, weekPlans, availability, config);
-      setSchedule(s); setErrors(e); setView("schedule");
-      save(availability, weekPlans, s, e, overrides);
+      const { schedule: s, errors: e, fairnessReport: fr } = generateSchedule(weeks, weekPlans, availability, config);
+      setSchedule(s); setErrors(e); setFairnessReport(fr); setView("schedule");
+      save(availability, weekPlans, s, e, overrides, fr);
       setGenerating(false);
       if (!e.length) showT("All slots filled", "success");
       else showT(`${e.length} gap${e.length > 1 ? "s" : ""}—check schedule`, "warning");
@@ -689,7 +691,7 @@ export default function CITScheduler() {
       if (schedule) {
         const ns = JSON.parse(JSON.stringify(schedule));
         if (ns[wk]?.[sk]?.[shift]) ns[wk][sk][shift][sc] = actor || null;
-        setSchedule(ns); save(availability, weekPlans, ns, errors, n);
+        setSchedule(ns); save(availability, weekPlans, ns, errors, n, fairnessReport);
       }
       return n;
     });
@@ -728,7 +730,7 @@ export default function CITScheduler() {
       {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
       {showShare && schedule && <ShareModal weeks={weeks} weekPlans={weekPlans} schedule={schedule} monthName={monthName} year={year} config={config} onClose={() => setShowShare(false)} showToast={showT} />}
       {showSettings && <SettingsPanel config={config} onSave={saveConfig} onClose={() => setShowSettings(false)} showToast={showT} />}
-      {showPasteMsg && <PasteMessagePanel config={config} availability={availability} activeDates={activeDates} onApply={newAvail => { setAvailability(newAvail); save(newAvail, weekPlans, schedule, errors, overrides); showT("Availability updated ✓", "success"); }} onClose={() => setShowPasteMsg(false)} />}
+      {showPasteMsg && <PasteMessagePanel config={config} availability={availability} activeDates={activeDates} onApply={newAvail => { setAvailability(newAvail); save(newAvail, weekPlans, schedule, errors, overrides, fairnessReport); showT("Availability updated ✓", "success"); }} onClose={() => setShowPasteMsg(false)} />}
       {toast && <div style={{ position: "fixed", top: "80px", left: "50%", transform: "translateX(-50%)", zIndex: 999, padding: "10px 22px", borderRadius: "12px", fontFamily: font, fontSize: "13px", fontWeight: "700", background: toast.type === "success" ? T.green : toast.type === "warning" ? T.amber : toast.type === "error" ? T.red : T.accent, color: "#fff", boxShadow: `0 0 20px ${(toast.type === "success" ? T.green : T.accent)}40`, animation: "slideDown .3s ease", letterSpacing: "0.02em" }}>{toast.msg}</div>}
 
       {/* HEADER */}
@@ -882,13 +884,19 @@ export default function CITScheduler() {
         {view === "dashboard" && <div>
           <SectionHead icon="📊" title="Actor Stats" sub="Shift counts and workload distribution" />
           {!schedule && <Card style={{ marginBottom: "14px", textAlign: "center", padding: "24px 20px", border: `1px solid ${T.amber}25`, background: `${T.amber}08` }}><p style={{ fontSize: "14px", color: T.amber, fontWeight: "600", margin: "0 0 4px" }}>No schedule generated yet</p><p style={{ fontSize: "13px", color: T.textMuted, margin: 0 }}>Generate a schedule to see shift counts and workload balance.</p></Card>}
-          {config.actors.map(actor => { const s = actorStats[actor] || { total: 0, scenarios: {} }; const cl = config.actorColors[actor] || T.textSoft; const approvedFor = Object.entries(config.scenarioActors).filter(([, a]) => a.includes(actor)).map(([sc]) => sc); const ad = activeDates.filter(d => normalizeAvail(availability[d]?.[actor])).length;
+          {fairnessReport && schedule && (() => { const fr = fairnessReport; const fc = fr.overallFairness >= 85 ? T.green : fr.overallFairness >= 70 ? T.amber : T.coral; return <Card style={{ marginBottom: "14px", textAlign: "center", padding: "20px", border: `1px solid ${fc}25`, background: `${fc}08` }}>
+            <div style={{ fontFamily: fontMono, fontSize: "32px", fontWeight: "700", color: fc }}>{fr.overallFairness}%</div>
+            <div style={{ fontSize: "11px", color: T.textMuted, fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Distribution Evenness</div>
+            <div style={{ fontSize: "12px", color: T.textSoft, marginTop: "4px" }}>Target: ~{Math.round(fr.fairTarget)} shifts per actor</div>
+          </Card>; })()}
+          {config.actors.map(actor => { const s = actorStats[actor] || { total: 0, scenarios: {} }; const cl = config.actorColors[actor] || T.textSoft; const approvedFor = Object.entries(config.scenarioActors).filter(([, a]) => a.includes(actor)).map(([sc]) => sc); const ad = activeDates.filter(d => normalizeAvail(availability[d]?.[actor])).length; const fi = fairnessReport?.actors?.[actor]; const badgeColor = !fi ? null : fi.gapCategory === 'fair' ? T.green : fi.gapCategory === 'under_structural' ? T.amber : fi.gapCategory === 'under_algorithmic' ? T.coral : fi.gapCategory === 'over' ? T.accent : null;
             return <Card key={actor} style={{ marginBottom: "8px" }} accent={s.total > 0 ? cl : null}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div style={{ display: "flex", alignItems: "center", gap: "12px" }}><div style={{ width: "38px", height: "38px", borderRadius: "10px", background: `${cl}20`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "15px", color: cl, border: `1.5px solid ${cl}30` }}>{actor[0]}</div><div><div style={{ fontWeight: "700", fontSize: "14px" }}>{actor}</div><div style={{ fontSize: "11px", color: T.textMuted }}>Avail {ad}/{activeDates.length} · {s.total} shift{s.total !== 1 ? "s" : ""}</div></div></div>{s.total > 0 && <div style={{ fontFamily: fontMono, fontSize: "20px", fontWeight: "700", color: cl, textShadow: `0 0 12px ${cl}30` }}>{s.total}</div>}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div style={{ display: "flex", alignItems: "center", gap: "12px" }}><div style={{ width: "38px", height: "38px", borderRadius: "10px", background: `${cl}20`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "15px", color: cl, border: `1.5px solid ${cl}30` }}>{actor[0]}</div><div><div style={{ fontWeight: "700", fontSize: "14px" }}>{actor}{fi && badgeColor && <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "4px", marginLeft: "8px", background: `${badgeColor}15`, color: badgeColor, fontWeight: "600", border: `1px solid ${badgeColor}25` }}>{s.total}/{Math.round(fi.target)}</span>}</div><div style={{ fontSize: "11px", color: T.textMuted }}>Avail {ad}/{activeDates.length} · {s.total} shift{s.total !== 1 ? "s" : ""}</div></div></div>{s.total > 0 && <div style={{ fontFamily: fontMono, fontSize: "20px", fontWeight: "700", color: cl, textShadow: `0 0 12px ${cl}30` }}>{s.total}</div>}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "8px" }}>{approvedFor.map(sc => <span key={sc} style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "6px", background: s.scenarios[sc] ? `${cl}15` : T.bgRaised, color: s.scenarios[sc] ? cl : T.textFaint, fontWeight: s.scenarios[sc] ? "600" : "400", border: `1px solid ${s.scenarios[sc] ? `${cl}25` : T.border}` }}>{config.scenarioIcons[sc] || ""} {sc}{s.scenarios[sc] ? ` ×${s.scenarios[sc]}` : ""}</span>)}</div>
+              {fi?.gapExplanation && <div style={{ fontSize: "11px", color: badgeColor, marginTop: "6px", padding: "4px 8px", borderRadius: "6px", background: `${badgeColor}08`, border: `1px solid ${badgeColor}15` }}>{fi.gapCategory === 'under_structural' ? '📌' : fi.gapCategory === 'over' ? '📈' : '⚠️'} {fi.gapExplanation}</div>}
             </Card>;
           })}
-          {schedule && <Card style={{ marginTop: "14px", background: T.accentSoft }}><SectionHead icon="⚖️" title="Balance" /><div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>{config.actors.filter(a => (actorStats[a] || { total: 0 }).total > 0).sort((a, b) => (actorStats[b]?.total || 0) - (actorStats[a]?.total || 0)).map(actor => { const s = actorStats[actor] || { total: 0 }; const mx = Math.max(...config.actors.map(a => (actorStats[a] || { total: 0 }).total), 1); const pct = (s.total / mx) * 100; const cl = config.actorColors[actor] || T.accent; return <div key={actor} style={{ flex: "1 0 45%", minWidth: "140px" }}><div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }}><span style={{ fontWeight: "600" }}>{actor}</span><span style={{ fontFamily: fontMono, color: T.textMuted, fontSize: "11px" }}>{s.total}</span></div><div style={{ height: "8px", borderRadius: "4px", background: T.border, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct}%`, borderRadius: "4px", background: `linear-gradient(90deg,${cl},${cl}BB)`, boxShadow: `0 0 8px ${cl}30`, transition: "width 0.4s" }} /></div></div> })}</div></Card>}
+          {schedule && (() => { const mx = Math.max(...config.actors.map(a => (actorStats[a] || { total: 0 }).total), 1); const targetPct = fairnessReport ? (fairnessReport.fairTarget / mx) * 100 : 0; return <Card style={{ marginTop: "14px", background: T.accentSoft }}><SectionHead icon="⚖️" title="Balance" /><div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>{config.actors.filter(a => (actorStats[a] || { total: 0 }).total > 0).sort((a, b) => (actorStats[b]?.total || 0) - (actorStats[a]?.total || 0)).map(actor => { const s = actorStats[actor] || { total: 0 }; const pct = (s.total / mx) * 100; const cl = config.actorColors[actor] || T.accent; return <div key={actor} style={{ flex: "1 0 45%", minWidth: "140px" }}><div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }}><span style={{ fontWeight: "600" }}>{actor}</span><span style={{ fontFamily: fontMono, color: T.textMuted, fontSize: "11px" }}>{s.total}</span></div><div style={{ position: "relative", height: "8px", borderRadius: "4px", background: T.border, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct}%`, borderRadius: "4px", background: `linear-gradient(90deg,${cl},${cl}BB)`, boxShadow: `0 0 8px ${cl}30`, transition: "width 0.4s" }} />{fairnessReport && <div style={{ position: "absolute", left: `${targetPct}%`, top: "-2px", bottom: "-2px", width: "2px", background: T.textMuted, opacity: 0.5, borderRadius: "1px" }} />}</div></div> })}</div>{fairnessReport && <div style={{ fontSize: "11px", color: T.textMuted, marginTop: "8px", textAlign: "center" }}>Target: ~{Math.round(fairnessReport.fairTarget)} shifts</div>}</Card>; })()}
         </div>}
 
         {/* ═══ REFERENCE TAB ═══ */}
