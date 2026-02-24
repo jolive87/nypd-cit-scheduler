@@ -30,10 +30,9 @@ export const DEFAULT_CONFIG = {
   defaultDays: { "slot1":"Tuesday", "slot2":"Wednesday", "slot3":"Thursday" },
   conflicts: [{ actor_cannot_play:["Jumper","Depression"], scope:"same_shift" }],
   shiftTimes: { AM:"Noon", PM:"8 PM" },
-  actorConstraints: {
-    "Chris": { allowedDays: ["Thursday"], maxPMRatio: 0 },
-    "Doc": { preferAM: true, maxPMRatio: 0.3 },
-    "Decatur": { preferAM: true, maxPMRatio: 0.3 },
+  actorSortOrder: {
+    "Decatur": 0, "Sat Charn": 1, "Mara": 2, "Rumi": 3, "Rich": 4,
+    "Antonia": 5, "Doc": 6, "Qurrat": 7, "Nicole": 8, "Edwin": 9, "Chris": 10,
   },
 };
 

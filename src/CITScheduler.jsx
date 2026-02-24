@@ -343,6 +343,139 @@ function WeekPlanner({ weekIndex, weekDays, plan, config, onChange, isMobile }) 
   );
 }
 
+// ─── SUPERVISOR AVAILABILITY MATRIX ─────────────────────────────────────────
+function SupervisorMatrix({ actors, activeDates, availability, weekPlans, weeks, config, activeActors, onCellChange, isMobile }) {
+  const dragRef = useRef({ active: false, value: true, shift: null });
+
+  useEffect(() => {
+    const stop = () => { dragRef.current.active = false; };
+    window.addEventListener('pointerup', stop);
+    return () => window.removeEventListener('pointerup', stop);
+  }, []);
+
+  // Group dates by week for visual separation
+  const datesByWeek = [];
+  weeks.forEach((wd, wi) => {
+    const plan = weekPlans[`week${wi}`] || getDefaultWeekPlan(wd, config);
+    const weekDates = SLOT_KEYS.map(sk => plan[sk]).filter(Boolean);
+    if (weekDates.length > 0) datesByWeek.push({ weekIndex: wi, dates: weekDates });
+  });
+
+  // Coverage counts per date per shift
+  const coverage = {};
+  for (const ds of activeDates) {
+    coverage[ds] = { AM: 0, PM: 0 };
+    for (const actor of actors) {
+      const norm = normalizeAvail(availability[ds]?.[actor]);
+      if (norm === 'both' || norm === 'am') coverage[ds].AM++;
+      if (norm === 'both' || norm === 'pm') coverage[ds].PM++;
+    }
+  }
+
+  const handlePointerDown = (actor, ds, shift) => {
+    const norm = normalizeAvail(availability[ds]?.[actor]);
+    const isOn = shift === 'AM' ? (norm === 'both' || norm === 'am') : (norm === 'both' || norm === 'pm');
+    dragRef.current = { active: true, value: !isOn, shift };
+    onCellChange(ds, actor, shift, !isOn);
+  };
+
+  const handlePointerEnter = (actor, ds, shift) => {
+    if (!dragRef.current.active || dragRef.current.shift !== shift) return;
+    const norm = normalizeAvail(availability[ds]?.[actor]);
+    const isOn = shift === 'AM' ? (norm === 'both' || norm === 'am') : (norm === 'both' || norm === 'pm');
+    if (isOn !== dragRef.current.value) {
+      onCellChange(ds, actor, shift, dragRef.current.value);
+    }
+  };
+
+  const cellSize = isMobile ? 28 : 36;
+  const nameWidth = isMobile ? 80 : 120;
+
+  return <div style={{ overflowX: 'auto', userSelect: 'none', WebkitUserSelect: 'none' }}>
+    <table style={{ borderCollapse: 'separate', borderSpacing: 2, fontSize: 12 }}>
+      <thead>
+        <tr>
+          <th style={{ padding: '4px 8px', textAlign: 'left', minWidth: nameWidth, position: 'sticky', left: 0, background: T.bgCard, zIndex: 2, fontFamily: font, fontSize: 11, fontWeight: 700, color: T.textMuted }}>Actor</th>
+          {datesByWeek.map(({ weekIndex, dates }) => dates.map((ds, di) => {
+            const dayInfo = weeks[weekIndex]?.find(w => w.date === ds);
+            const sk = SLOT_KEYS.find(k => (weekPlans[`week${weekIndex}`] || getDefaultWeekPlan(weeks[weekIndex], config))[k] === ds);
+            const cl = sk ? slotColors[sk] : T.textMuted;
+            return <th key={ds} style={{ padding: '4px 2px', textAlign: 'center', fontSize: 10, fontWeight: 600, minWidth: cellSize * 2 + 6, fontFamily: fontMono, color: T.textSoft, borderBottom: `3px solid ${cl}`, borderLeft: di === 0 && weekIndex > 0 ? `2px solid ${T.border}` : 'none' }}>
+              <div>{dayInfo?.dayName?.slice(0, 3) || ''}</div>
+              <div style={{ color: T.textFaint }}>{fmtDate(ds).split(' ')[1]}</div>
+            </th>;
+          }))}
+        </tr>
+        <tr>
+          <th style={{ position: 'sticky', left: 0, background: T.bgCard, zIndex: 2 }} />
+          {datesByWeek.map(({ weekIndex, dates }) => dates.map((ds, di) => <th key={`sh-${ds}`} style={{ padding: 0, borderLeft: di === 0 && weekIndex > 0 ? `2px solid ${T.border}` : 'none' }}>
+            <div style={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+              <span style={{ fontSize: 9, color: T.textFaint, width: cellSize, textAlign: 'center' }}>☀️</span>
+              <span style={{ fontSize: 9, color: T.textFaint, width: cellSize, textAlign: 'center' }}>🌙</span>
+            </div>
+          </th>))}
+        </tr>
+      </thead>
+      <tbody>
+        {actors.map(actor => {
+          const isActive = !!activeActors[actor];
+          const cl = config.actorColors[actor] || T.accent;
+          return <tr key={actor} style={{ opacity: isActive ? 1 : 0.4 }}>
+            <td style={{ padding: '4px 8px', fontWeight: 600, fontSize: 12, color: isActive ? cl : T.textFaint, fontFamily: font, whiteSpace: 'nowrap', position: 'sticky', left: 0, background: T.bgCard, zIndex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 20, height: 20, borderRadius: 5, background: `${cl}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: cl }}>{actor[0]}</div>
+                <span style={{ maxWidth: nameWidth - 36, overflow: 'hidden', textOverflow: 'ellipsis' }}>{actor}</span>
+              </div>
+            </td>
+            {datesByWeek.map(({ weekIndex, dates }) => dates.map((ds, di) => {
+              const norm = normalizeAvail(availability[ds]?.[actor]);
+              const amOn = norm === 'both' || norm === 'am';
+              const pmOn = norm === 'both' || norm === 'pm';
+              return <td key={ds} style={{ padding: 0, borderLeft: di === 0 && weekIndex > 0 ? `2px solid ${T.border}` : 'none' }}>
+                <div style={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                  {[{ shift: 'AM', on: amOn }, { shift: 'PM', on: pmOn }].map(({ shift, on }) => (
+                    <div
+                      key={shift}
+                      onPointerDown={() => handlePointerDown(actor, ds, shift)}
+                      onPointerEnter={() => handlePointerEnter(actor, ds, shift)}
+                      role="checkbox"
+                      aria-checked={on}
+                      aria-label={`${actor} ${fmtDateShort(ds)} ${shift}`}
+                      style={{
+                        width: cellSize, height: cellSize - 4, borderRadius: 4, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: on ? (shift === 'AM' ? T.green : T.purple) : T.bgRaised,
+                        color: on ? '#fff' : T.textFaint,
+                        border: `1.5px solid ${on ? (shift === 'AM' ? `${T.green}80` : `${T.purple}80`) : T.border}`,
+                        fontSize: 11, fontWeight: 700, touchAction: 'none',
+                        transition: 'background-color 0.1s',
+                      }}
+                    >
+                      {on ? '✓' : ''}
+                    </div>
+                  ))}
+                </div>
+              </td>;
+            }))}
+          </tr>;
+        })}
+        {/* Coverage row */}
+        <tr>
+          <td style={{ padding: '6px 8px', fontWeight: 700, fontSize: 11, color: T.textMuted, fontFamily: fontMono, position: 'sticky', left: 0, background: T.bgCard, zIndex: 1 }}>Coverage</td>
+          {datesByWeek.map(({ weekIndex, dates }) => dates.map((ds, di) => <td key={ds} style={{ padding: 0, borderLeft: di === 0 && weekIndex > 0 ? `2px solid ${T.border}` : 'none' }}>
+            <div style={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+              {['AM', 'PM'].map(shift => {
+                const count = coverage[ds]?.[shift] || 0;
+                return <div key={shift} style={{ width: cellSize, textAlign: 'center', fontFamily: fontMono, fontSize: 11, fontWeight: 700, color: count >= 3 ? T.green : count >= 2 ? T.amber : T.red }}>{count}</div>;
+              })}
+            </div>
+          </td>))}
+        </tr>
+      </tbody>
+    </table>
+  </div>;
+}
+
 // ─── SETTINGS ──────────────────────────────────────────────────────────────
 function SettingsPanel({ config, onSave, onClose, showToast }) {
   const [cfg, setCfg] = useState(JSON.parse(JSON.stringify(config)));
@@ -357,8 +490,9 @@ function SettingsPanel({ config, onSave, onClose, showToast }) {
   const u = fn => { setCfg(p => { const n = JSON.parse(JSON.stringify(p)); fn(n); return n }); setChanged(true) };
   const allSc = Object.keys(cfg.scenarioActors);
 
-  const addActor = () => { const n = newActor.trim(); if (!n || cfg.actors.includes(n)) return; u(c => { c.actors.push(n); const used = Object.values(c.actorColors); c.actorColors[n] = COLOR_PALETTE.find(x => !used.includes(x)) || COLOR_PALETTE[c.actors.length % COLOR_PALETTE.length] }); setNewActor("") };
-  const rmActor = a => { u(c => { c.actors = c.actors.filter(x => x !== a); delete c.actorColors[a]; Object.keys(c.scenarioActors).forEach(sc => { c.scenarioActors[sc] = c.scenarioActors[sc].filter(x => x !== a) }) }); setConfirmDel(null) };
+  const addActor = () => { const n = newActor.trim(); if (!n || cfg.actors.includes(n)) return; u(c => { c.actors.push(n); const used = Object.values(c.actorColors); c.actorColors[n] = COLOR_PALETTE.find(x => !used.includes(x)) || COLOR_PALETTE[c.actors.length % COLOR_PALETTE.length]; if (!c.actorSortOrder) c.actorSortOrder = {}; c.actorSortOrder[n] = Math.max(...Object.values(c.actorSortOrder || {}), -1) + 1 }); setNewActor("") };
+  const rmActor = a => { u(c => { c.actors = c.actors.filter(x => x !== a); delete c.actorColors[a]; delete c.actorSortOrder?.[a]; Object.keys(c.scenarioActors).forEach(sc => { c.scenarioActors[sc] = c.scenarioActors[sc].filter(x => x !== a) }) }); setConfirmDel(null) };
+  const moveActor = (actor, dir) => { u(c => { if (!c.actorSortOrder) c.actorSortOrder = Object.fromEntries(c.actors.map((a, i) => [a, i])); const sorted = [...c.actors].sort((a, b) => (c.actorSortOrder[a] ?? 999) - (c.actorSortOrder[b] ?? 999)); const idx = sorted.indexOf(actor); const swapIdx = idx + dir; if (swapIdx < 0 || swapIdx >= sorted.length) return; const swapActor = sorted[swapIdx]; const temp = c.actorSortOrder[actor] ?? idx; c.actorSortOrder[actor] = c.actorSortOrder[swapActor] ?? swapIdx; c.actorSortOrder[swapActor] = temp }) };
   const toggleAS = (sc, a) => { u(c => { const l = c.scenarioActors[sc] || []; if (l.includes(a)) c.scenarioActors[sc] = l.filter(x => x !== a); else c.scenarioActors[sc] = [...l, a] }) };
   const addSc = () => { const n = newScenario.trim(); if (!n || cfg.scenarioActors[n]) return; u(c => { c.scenarioActors[n] = []; c.scenarioIcons[n] = "🎭" }); setNewScenario("") };
   const rmSc = sc => { u(c => { delete c.scenarioActors[sc]; delete c.scenarioIcons[sc]; SLOT_KEYS.forEach(sk => { if (c.slotScenarios[sk]) c.slotScenarios[sk] = c.slotScenarios[sk].filter(s => s !== sc) }) }); setConfirmDel(null) };
@@ -382,7 +516,7 @@ function SettingsPanel({ config, onSave, onClose, showToast }) {
     e.target.value = '';
   };
 
-  const tabs = [{ key: "actors", icon: "👤", label: "Actors" }, { key: "scenarios", icon: "🎭", label: "Scenarios" }, { key: "days", icon: "📅", label: "Day Setup" }, { key: "rules", icon: "⚠️", label: "Rules" }, { key: "constraints", icon: "🔒", label: "Constraints" }, { key: "data", icon: "💾", label: "Data" }];
+  const tabs = [{ key: "actors", icon: "👤", label: "Actors" }, { key: "scenarios", icon: "🎭", label: "Scenarios" }, { key: "days", icon: "📅", label: "Day Setup" }, { key: "rules", icon: "⚠️", label: "Rules" }, { key: "data", icon: "💾", label: "Data" }];
 
   return <Overlay onClose={onClose}><Card style={{ padding: 0, borderRadius: "18px" }}>
     <div style={{ padding: "24px 24px 16px", borderBottom: `1px solid ${T.border}`, background: T.bgRaised, borderRadius: "18px 18px 0 0" }}>
@@ -390,71 +524,13 @@ function SettingsPanel({ config, onSave, onClose, showToast }) {
       <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "2px" }}>{tabs.map(t => <button key={t.key} onClick={() => setTab(t.key)} style={{ ...btnBase, padding: "8px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", background: tab === t.key ? `linear-gradient(135deg,${T.accent},${T.accentHover})` : "transparent", color: tab === t.key ? "#fff" : T.textMuted, boxShadow: tab === t.key ? `0 0 12px ${T.accentGlow}` : "none", whiteSpace: "nowrap", letterSpacing: "0.02em", minHeight: "40px" }}>{t.icon} {t.label}</button>)}</div>
     </div>
     <div style={{ padding: "20px 24px 24px", maxHeight: "55vh", overflowY: "auto" }}>
-      {tab === "actors" && <div><p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Add or remove actors. Removing clears them from all scenarios.</p><div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}><Input value={newActor} onChange={setNewActor} placeholder="New actor name..." style={{ flex: 1 }} /><Btn onClick={addActor}>+ Add</Btn></div>{cfg.actors.map(a => { const cl = cfg.actorColors[a]; const sc = allSc.filter(s => (cfg.scenarioActors[s] || []).includes(a)).length; return <div key={a} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "12px", border: `1px solid ${T.border}`, background: T.bgRaised, marginBottom: "6px" }}><div style={{ display: "flex", alignItems: "center", gap: "10px" }}><div style={{ width: "32px", height: "32px", borderRadius: "8px", background: `${cl}20`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700", fontSize: "14px", color: cl }}>{a[0]}</div><div><div style={{ fontWeight: "600", color: T.text, fontSize: "14px" }}>{a}</div><div style={{ fontSize: "11px", color: T.textMuted }}>{sc} scenario{sc !== 1 ? "s" : ""}</div></div></div><div style={{ display: "flex", alignItems: "center", gap: "6px" }}><div style={{ width: "24px", height: "24px", borderRadius: "6px", background: cl, border: `1px solid ${T.border}` }} />{confirmDel === a ? <div style={{ display: "flex", gap: "4px" }}><Btn variant="danger" onClick={() => rmActor(a)}>Yes</Btn><Btn variant="small" onClick={() => setConfirmDel(null)}>No</Btn></div> : <Btn variant="ghost" onClick={() => setConfirmDel(a)} style={{ color: T.red, padding: "4px 8px", minHeight: "36px" }}>×</Btn>}</div></div> })}</div>}
+      {tab === "actors" && (() => { const settingsSorted = [...cfg.actors].sort((a, b) => (cfg.actorSortOrder?.[a] ?? 999) - (cfg.actorSortOrder?.[b] ?? 999)); return <div><p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Add, remove, or reorder actors. Removing clears them from all scenarios.</p><div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}><Input value={newActor} onChange={setNewActor} placeholder="New actor name..." style={{ flex: 1 }} /><Btn onClick={addActor}>+ Add</Btn></div>{settingsSorted.map((a, idx) => { const cl = cfg.actorColors[a]; const sc = allSc.filter(s => (cfg.scenarioActors[s] || []).includes(a)).length; return <div key={a} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "12px", border: `1px solid ${T.border}`, background: T.bgRaised, marginBottom: "6px" }}><div style={{ display: "flex", alignItems: "center", gap: "10px" }}><div style={{ display: "flex", flexDirection: "column", gap: "2px" }}><button onClick={() => moveActor(a, -1)} disabled={idx === 0} aria-label={`Move ${a} up`} style={{ ...btnBase, fontSize: "11px", padding: "2px 6px", borderRadius: "6px", background: idx === 0 ? T.bgRaised : T.bgInput, color: idx === 0 ? T.textFaint : T.textSoft, border: `1px solid ${T.border}`, minHeight: "24px", minWidth: "28px", opacity: idx === 0 ? 0.4 : 1 }}>▲</button><button onClick={() => moveActor(a, 1)} disabled={idx === settingsSorted.length - 1} aria-label={`Move ${a} down`} style={{ ...btnBase, fontSize: "11px", padding: "2px 6px", borderRadius: "6px", background: idx === settingsSorted.length - 1 ? T.bgRaised : T.bgInput, color: idx === settingsSorted.length - 1 ? T.textFaint : T.textSoft, border: `1px solid ${T.border}`, minHeight: "24px", minWidth: "28px", opacity: idx === settingsSorted.length - 1 ? 0.4 : 1 }}>▼</button></div><div style={{ width: "32px", height: "32px", borderRadius: "8px", background: `${cl}20`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700", fontSize: "14px", color: cl }}>{a[0]}</div><div><div style={{ fontWeight: "600", color: T.text, fontSize: "14px" }}>{a}</div><div style={{ fontSize: "11px", color: T.textMuted }}>{sc} scenario{sc !== 1 ? "s" : ""}</div></div></div><div style={{ display: "flex", alignItems: "center", gap: "6px" }}><div style={{ width: "24px", height: "24px", borderRadius: "6px", background: cl, border: `1px solid ${T.border}` }} />{confirmDel === a ? <div style={{ display: "flex", gap: "4px" }}><Btn variant="danger" onClick={() => rmActor(a)}>Yes</Btn><Btn variant="small" onClick={() => setConfirmDel(null)}>No</Btn></div> : <Btn variant="ghost" onClick={() => setConfirmDel(a)} style={{ color: T.red, padding: "4px 8px", minHeight: "36px" }}>×</Btn>}</div></div> })}</div> })()}
 
       {tab === "scenarios" && <div><p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Tap actors to approve/remove them for each scenario.</p><div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}><Input value={newScenario} onChange={setNewScenario} placeholder="New scenario..." style={{ flex: 1 }} /><Btn onClick={addSc}>+ Add</Btn></div>{allSc.map(sc => { const actors = cfg.scenarioActors[sc] || []; const icon = cfg.scenarioIcons[sc] || "🎭"; return <Card key={sc} style={{ marginBottom: "10px", padding: "14px" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}><div style={{ display: "flex", alignItems: "center", gap: "8px" }}>{editIcon === sc ? <div style={{ display: "flex", flexWrap: "wrap", gap: "3px", maxWidth: "200px" }}>{ICON_OPTIONS.map(ic => <button key={ic} onClick={() => { u(c => { c.scenarioIcons[sc] = ic }); setEditIcon(null) }} style={{ ...btnBase, fontSize: "16px", padding: "4px 6px", borderRadius: "6px", background: ic === icon ? T.accentSoft : "transparent", border: `1px solid ${ic === icon ? T.accent : T.border}`, minHeight: "36px", minWidth: "36px" }}>{ic}</button>)}</div> : <button onClick={() => setEditIcon(sc)} style={{ ...btnBase, fontSize: "18px", background: "none", padding: "2px", minHeight: "36px" }}>{icon}</button>}<span style={{ fontWeight: "700", fontSize: "15px", color: T.text }}>{sc}</span><Badge type="neutral">{actors.length}</Badge></div>{confirmDel === `sc-${sc}` ? <div style={{ display: "flex", gap: "4px" }}><Btn variant="danger" onClick={() => rmSc(sc)}>Remove</Btn><Btn variant="small" onClick={() => setConfirmDel(null)}>Cancel</Btn></div> : <Btn variant="ghost" onClick={() => setConfirmDel(`sc-${sc}`)} style={{ color: T.red }}>×</Btn>}</div><div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>{cfg.actors.map(a => <Chip key={a} active={actors.includes(a)} color={cfg.actorColors[a]} onClick={() => toggleAS(sc, a)} small>{a}</Chip>)}</div></Card> })}</div>}
 
       {tab === "days" && <div><p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Assign scenarios to each training slot.</p>{SLOT_KEYS.map(sk => { const assigned = cfg.slotScenarios[sk] || []; const cl = slotColors[sk]; return <Card key={sk} style={{ marginBottom: "10px" }} accent={cl}><div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}><SlotBar slotKey={sk} /><span style={{ fontWeight: "700", fontSize: "16px", color: T.text }}>{cfg.slotNames[sk]}</span><Badge type="info">Default: {cfg.defaultDays[sk]}</Badge></div><div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>{allSc.map(sc => { const active = assigned.includes(sc); const otherSlot = SLOT_KEYS.find(s => s !== sk && (cfg.slotScenarios[s] || []).includes(sc)); return <Chip key={sc} active={active} color={cl} onClick={() => toggleSlotSc(sk, sc)} dimmed={!!otherSlot && !active}>{cfg.scenarioIcons[sc] || "🎭"} {sc}{otherSlot && !active ? ` (${cfg.slotNames[otherSlot]})` : ""}</Chip> })}</div></Card> })}</div>}
 
       {tab === "rules" && <div><p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Same actor can't play both scenarios in the same shift.</p>{(cfg.conflicts || []).map((rule, i) => <Card key={i} style={{ marginBottom: "8px", padding: "14px" }}><div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}><span style={{ fontSize: "13px", fontWeight: "600", color: T.text }}>Can't play</span><StyledSelect value={rule.actor_cannot_play[0]} onChange={e => { u(c => { c.conflicts[i].actor_cannot_play[0] = e.target.value }) }}><option value="">—</option>{allSc.map(s => <option key={s}>{s}</option>)}</StyledSelect><span style={{ color: T.textMuted }}>+</span><StyledSelect value={rule.actor_cannot_play[1]} onChange={e => { u(c => { c.conflicts[i].actor_cannot_play[1] = e.target.value }) }}><option value="">—</option>{allSc.map(s => <option key={s}>{s}</option>)}</StyledSelect><Btn variant="ghost" onClick={() => { u(c => { c.conflicts.splice(i, 1) }) }} style={{ color: T.red }}>×</Btn></div></Card>)}<Btn variant="secondary" onClick={() => { u(c => { c.conflicts = [...(c.conflicts || []), { actor_cannot_play: ["", ""], scope: "same_shift" }] }) }}>+ Add Rule</Btn></div>}
-
-      {tab === "constraints" && <div>
-        <p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Scheduling constraints per actor. Day restrictions, AM preference, and PM cap.</p>
-        {cfg.actors.map(actor => {
-          const ac = cfg.actorConstraints?.[actor] || {};
-          const weekdays = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
-          const effectiveDays = !ac.allowedDays?.length ? weekdays : ac.allowedDays;
-          const cl = cfg.actorColors[actor] || T.accent;
-          return <Card key={actor} style={{ marginBottom: "10px", padding: "14px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-              <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: `${cl}20`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700", fontSize: "14px", color: cl }}>{actor[0]}</div>
-              <span style={{ fontWeight: "700", fontSize: "14px" }}>{actor}</span>
-            </div>
-            <div style={{ marginBottom: "10px" }}>
-              <div style={{ fontSize: "11px", fontWeight: "700", color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>Allowed Days {!ac.allowedDays?.length ? "(all)" : ""}</div>
-              <div style={{ display: "flex", gap: "4px" }}>
-                {weekdays.map(day => {
-                  const isOn = effectiveDays.includes(day);
-                  return <button key={day} onClick={() => {
-                    u(c => {
-                      if (!c.actorConstraints) c.actorConstraints = {};
-                      if (!c.actorConstraints[actor]) c.actorConstraints[actor] = {};
-                      const cur = c.actorConstraints[actor].allowedDays;
-                      const eff = !cur?.length ? weekdays : cur;
-                      const next = eff.includes(day) ? eff.filter(d => d !== day) : [...eff, day];
-                      c.actorConstraints[actor].allowedDays = next.length === 5 ? [] : next;
-                    });
-                  }} style={{ ...btnBase, flex: "1 1 0", padding: "6px 4px", borderRadius: "8px", fontSize: "12px", fontWeight: "600", background: isOn ? `${cl}18` : T.bgRaised, border: `1.5px solid ${isOn ? cl : T.border}`, color: isOn ? cl : T.textFaint, minHeight: "36px" }}>{day.slice(0,3)}</button>;
-                })}
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-              <div>
-                <div style={{ fontSize: "13px", fontWeight: "600", color: T.text }}>Prefers AM</div>
-                <div style={{ fontSize: "11px", color: T.textMuted }}>Gets PM only when needed</div>
-              </div>
-              <button onClick={() => u(c => {
-                if (!c.actorConstraints) c.actorConstraints = {};
-                if (!c.actorConstraints[actor]) c.actorConstraints[actor] = {};
-                c.actorConstraints[actor].preferAM = !c.actorConstraints[actor].preferAM;
-              })} style={{ ...btnBase, padding: "8px 16px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", background: ac.preferAM ? `${T.gold}20` : T.bgRaised, border: `1.5px solid ${ac.preferAM ? T.gold : T.border}`, color: ac.preferAM ? T.gold : T.textMuted, minHeight: "36px" }}>{ac.preferAM ? "☀️ Yes" : "—"}</button>
-            </div>
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: T.text, marginBottom: "4px" }}>
-                <span style={{ fontWeight: "600" }}>PM Cap</span>
-                <span style={{ fontFamily: fontMono, color: T.textMuted }}>{ac.maxPMRatio === 0 ? "Never PM" : ac.maxPMRatio != null ? `${Math.round(ac.maxPMRatio * 100)}%` : "No limit"}</span>
-              </div>
-              <input type="range" min="0" max="100" step="10" value={ac.maxPMRatio != null ? Math.round(ac.maxPMRatio * 100) : 100} onChange={e => u(c => {
-                if (!c.actorConstraints) c.actorConstraints = {};
-                if (!c.actorConstraints[actor]) c.actorConstraints[actor] = {};
-                const val = parseInt(e.target.value);
-                c.actorConstraints[actor].maxPMRatio = val === 100 ? undefined : val / 100;
-              })} style={{ width: "100%", accentColor: T.accent }} />
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: T.textFaint }}><span>Never PM</span><span>No limit</span></div>
-            </div>
-          </Card>;
-        })}
-      </div>}
 
       {tab === "data" && <div>
         <p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Export your data as a backup file. Import to restore on another device.</p>
@@ -616,9 +692,11 @@ export default function CITScheduler() {
   const [exporting, setExporting] = useState(false);
   const [showPasteMsg, setShowPasteMsg] = useState(false);
   const [fairnessReport, setFairnessReport] = useState(null);
+  const [availView, setAvailView] = useState("compact");
 
   const weeks = getWeeksInMonth(year, month);
   const monthName = new Date(year, month).toLocaleString('default', { month: 'long' });
+  const sortedActors = [...config.actors].sort((a, b) => (config.actorSortOrder?.[a] ?? 999) - (config.actorSortOrder?.[b] ?? 999));
   // 1-based month for storage key
   const sKey = `cit-v4-${year}-${String(month + 1).padStart(2, '0')}`;
 
@@ -691,6 +769,22 @@ export default function CITScheduler() {
   };
   const clearDay = ds => {
     setAvailability(p => { const n = { ...p, [ds]: {} }; save(n, weekPlans, schedule, errors, overrides, fairnessReport, activeActors); return n });
+  };
+  const setShiftAvailability = (ds, actor, shift, enabled) => {
+    setAvailability(p => {
+      const current = normalizeAvail(p[ds]?.[actor]);
+      let next;
+      if (shift === 'AM') {
+        const pmOn = current === 'both' || current === 'pm';
+        next = enabled ? (pmOn ? 'both' : 'am') : (pmOn ? 'pm' : false);
+      } else {
+        const amOn = current === 'both' || current === 'am';
+        next = enabled ? (amOn ? 'both' : 'pm') : (amOn ? 'am' : false);
+      }
+      const n = { ...p, [ds]: { ...p[ds], [actor]: next } };
+      save(n, weekPlans, schedule, errors, overrides, fairnessReport, activeActors);
+      return n;
+    });
   };
 
   const copyFromLastMonth = async () => {
@@ -865,7 +959,7 @@ export default function CITScheduler() {
               </Badge>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
-              {config.actors.map(actor => {
+              {sortedActors.map(actor => {
                 const isOn = !!activeActors[actor];
                 const cl = config.actorColors[actor] || T.accent;
                 return <button key={actor} onClick={() => {
@@ -908,7 +1002,17 @@ export default function CITScheduler() {
             </div>
           </Card>
 
-          {weeks.map((wd, wi) => {
+          {/* View toggle: Compact / Matrix */}
+          <div style={{ display: "flex", gap: "4px", marginBottom: "14px" }}>
+            <button onClick={() => setAvailView("compact")} style={{ ...btnBase, flex: 1, padding: "10px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", background: availView === "compact" ? `linear-gradient(135deg,${T.accent},${T.accentHover})` : T.bgRaised, color: availView === "compact" ? "#fff" : T.textMuted, border: `1px solid ${availView === "compact" ? T.accent : T.border}`, minHeight: "44px" }}>📋 Compact</button>
+            <button onClick={() => setAvailView("matrix")} style={{ ...btnBase, flex: 1, padding: "10px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", background: availView === "matrix" ? `linear-gradient(135deg,${T.accent},${T.accentHover})` : T.bgRaised, color: availView === "matrix" ? "#fff" : T.textMuted, border: `1px solid ${availView === "matrix" ? T.accent : T.border}`, minHeight: "44px" }}>📊 Matrix</button>
+          </div>
+
+          {availView === "matrix" && <Card style={{ marginBottom: "16px", padding: bp.isMobile ? "8px" : "14px" }}>
+            <SupervisorMatrix actors={sortedActors} activeDates={activeDates} availability={availability} weekPlans={weekPlans} weeks={weeks} config={config} activeActors={activeActors} onCellChange={setShiftAvailability} isMobile={bp.isMobile} />
+          </Card>}
+
+          {availView === "compact" && weeks.map((wd, wi) => {
             const plan = weekPlans[`week${wi}`] || getDefaultWeekPlan(wd, config);
             const activeSlots = SLOT_KEYS.filter(sk => plan[sk]);
             if (!activeSlots.length) return <Card key={wi} style={{ marginBottom: "10px", opacity: 0.5 }}><span style={{ fontFamily: fontMono, fontSize: "11px", color: T.textMuted }}>WK{wi + 1}</span> <Badge type="error">CANCELED</Badge></Card>;
@@ -927,7 +1031,7 @@ export default function CITScheduler() {
                     <Badge type={approvedAvail >= 3 ? "success" : approvedAvail >= 2 ? "warning" : "error"}>{approvedAvail} ready</Badge>
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginBottom: "8px" }}>
-                    {config.actors.map(actor => {
+                    {sortedActors.map(actor => {
                       const norm = normalizeAvail(availability[ds]?.[actor]);
                       const isAvail = !!norm;
                       const isActorActive = !!activeActors[actor];
@@ -1018,7 +1122,7 @@ export default function CITScheduler() {
             <div style={{ fontSize: "11px", color: T.textMuted, fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Distribution Evenness</div>
             <div style={{ fontSize: "12px", color: T.textSoft, marginTop: "4px" }}>Target: ~{Math.round(fr.fairTarget)} shifts per actor</div>
           </Card>; })()}
-          {config.actors.map(actor => { const s = actorStats[actor] || { total: 0, scenarios: {} }; const cl = config.actorColors[actor] || T.textSoft; const approvedFor = Object.entries(config.scenarioActors).filter(([, a]) => a.includes(actor)).map(([sc]) => sc); const ad = activeDates.filter(d => normalizeAvail(availability[d]?.[actor])).length; const fi = fairnessReport?.actors?.[actor]; const badgeColor = !fi ? null : fi.gapCategory === 'fair' ? T.green : fi.gapCategory === 'under_structural' ? T.amber : fi.gapCategory === 'under_algorithmic' ? T.coral : fi.gapCategory === 'over' ? T.accent : null;
+          {sortedActors.map(actor => { const s = actorStats[actor] || { total: 0, scenarios: {} }; const cl = config.actorColors[actor] || T.textSoft; const approvedFor = Object.entries(config.scenarioActors).filter(([, a]) => a.includes(actor)).map(([sc]) => sc); const ad = activeDates.filter(d => normalizeAvail(availability[d]?.[actor])).length; const fi = fairnessReport?.actors?.[actor]; const badgeColor = !fi ? null : fi.gapCategory === 'fair' ? T.green : fi.gapCategory === 'under_structural' ? T.amber : fi.gapCategory === 'under_algorithmic' ? T.coral : fi.gapCategory === 'over' ? T.accent : null;
             return <Card key={actor} style={{ marginBottom: "8px" }} accent={s.total > 0 ? cl : null}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div style={{ display: "flex", alignItems: "center", gap: "12px" }}><div style={{ width: "38px", height: "38px", borderRadius: "10px", background: `${cl}20`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "15px", color: cl, border: `1.5px solid ${cl}30` }}>{actor[0]}</div><div><div style={{ fontWeight: "700", fontSize: "14px" }}>{actor}{fi && badgeColor && <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "4px", marginLeft: "8px", background: `${badgeColor}15`, color: badgeColor, fontWeight: "600", border: `1px solid ${badgeColor}25` }}>{s.total}/{Math.round(fi.target)}</span>}</div><div style={{ fontSize: "11px", color: T.textMuted }}>Avail {ad}/{activeDates.length} · {s.total} shift{s.total !== 1 ? "s" : ""}</div></div></div>{s.total > 0 && <div style={{ fontFamily: fontMono, fontSize: "20px", fontWeight: "700", color: cl, textShadow: `0 0 12px ${cl}30` }}>{s.total}</div>}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "8px" }}>{approvedFor.map(sc => <span key={sc} style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "6px", background: s.scenarios[sc] ? `${cl}15` : T.bgRaised, color: s.scenarios[sc] ? cl : T.textFaint, fontWeight: s.scenarios[sc] ? "600" : "400", border: `1px solid ${s.scenarios[sc] ? `${cl}25` : T.border}` }}>{config.scenarioIcons[sc] || ""} {sc}{s.scenarios[sc] ? ` ×${s.scenarios[sc]}` : ""}</span>)}</div>
