@@ -105,52 +105,52 @@ async function copyToClipboard(text) {
 }
 
 // ─── UI BUILDING BLOCKS ────────────────────────────────────────────────────
-const btnBase = { fontFamily: font, border: "none", cursor: "pointer", transition: "all 0.15s ease", letterSpacing: "0.01em" };
+const btnBase = { fontFamily: font, border: "none", cursor: "pointer", transition: "all 150ms cubic-bezier(0.2, 0, 0, 1)", letterSpacing: "0.01em" };
 
 function Btn({ children, variant = "primary", onClick, style, disabled, "aria-label": ariaLabel }) {
   const v = {
-    primary: { background: `linear-gradient(135deg, ${T.accent} 0%, ${T.accentHover} 100%)`, color: "#fff", fontWeight: "700", boxShadow: `0 0 20px ${T.accentGlow}, 0 2px 4px rgba(180,140,110,0.15)`, padding: "11px 22px", borderRadius: "12px", fontSize: "13.5px" },
-    secondary: { background: T.bgRaised, color: T.textSoft, fontWeight: "600", boxShadow: "0 1px 3px rgba(180,140,110,0.08)", border: `1px solid ${T.border}`, padding: "10px 18px", borderRadius: "11px", fontSize: "13px" },
-    ghost: { background: "transparent", color: T.textMuted, fontWeight: "500", padding: "8px 14px", borderRadius: "10px", fontSize: "13px" },
-    danger: { background: T.redSoft, color: T.red, fontWeight: "600", padding: "7px 14px", borderRadius: "9px", fontSize: "12px", border: `1px solid ${T.red}30` },
-    small: { background: T.bgRaised, color: T.textMuted, fontWeight: "600", padding: "6px 12px", borderRadius: "8px", fontSize: "11px", border: `1px solid ${T.border}` },
-    mint: { background: `linear-gradient(135deg, ${T.mint}, ${T.mint}DD)`, color: "#fff", fontWeight: "700", boxShadow: `0 0 16px ${T.mint}30`, padding: "11px 22px", borderRadius: "12px", fontSize: "13.5px" },
+    primary: { background: T.accent, color: "#fff", fontWeight: "600", boxShadow: T.shadowAccent, padding: `${T.sp12}px ${T.sp24}px`, borderRadius: `${T.radiusMd}px`, fontSize: `${T.fontBody}px` },
+    secondary: { background: T.bgInput, color: T.textSoft, fontWeight: "600", border: `1px solid rgba(26,20,18,0.08)`, padding: `${T.sp12}px ${T.sp20}px`, borderRadius: `${T.radiusMd}px`, fontSize: `${T.fontBody}px` },
+    ghost: { background: "transparent", color: T.textMuted, fontWeight: "500", border: `1px solid rgba(26,20,18,0.08)`, padding: `10px ${T.sp16}px`, borderRadius: `${T.radiusMd}px`, fontSize: `${T.fontSmall}px` },
+    danger: { background: T.redSoft, color: T.red, fontWeight: "600", padding: `${T.sp8}px ${T.sp16}px`, borderRadius: `${T.radiusSm}px`, fontSize: `${T.fontMono}px`, border: `1px solid ${T.red}30` },
+    small: { background: T.bgInput, color: T.textMuted, fontWeight: "600", padding: `${T.sp4}px ${T.sp12}px`, borderRadius: `${T.radiusSm}px`, fontSize: `${T.fontCaption}px`, border: `1px solid rgba(26,20,18,0.08)` },
+    mint: { background: T.green, color: "#fff", fontWeight: "600", boxShadow: `0 2px 8px ${T.green}30`, padding: `${T.sp12}px ${T.sp24}px`, borderRadius: `${T.radiusMd}px`, fontSize: `${T.fontBody}px` },
   };
   return <button onClick={onClick} disabled={disabled} aria-label={ariaLabel} style={{ ...btnBase, ...v[variant], opacity: disabled ? 0.4 : 1, minHeight: "44px", ...style }}>{children}</button>;
 }
 
-function Card({ children, style, glow, accent }) {
-  return <div style={{ background: T.bgCard, borderRadius: "16px", padding: "20px", border: `1px solid ${accent ? `${accent}25` : T.border}`, boxShadow: glow ? `0 0 24px ${glow}10, 0 2px 8px rgba(180,140,110,0.10)` : "0 2px 8px rgba(180,140,110,0.08)", transition: "all 0.2s", ...style }}>{children}</div>;
+function Card({ children, style, elevated, accent }) {
+  return <div style={{ background: T.bgCard, borderRadius: `${T.radiusLg}px`, padding: `${T.sp24}px`, border: `1px solid ${accent ? `${accent}25` : 'rgba(26,20,18,0.06)'}`, boxShadow: elevated ? T.shadowElevated : T.shadowCard, transition: "all 200ms cubic-bezier(0.2, 0, 0, 1)", ...style }}>{children}</div>;
 }
 
 function Badge({ type = "neutral", children }) {
   const m = { success: { bg: T.greenSoft, c: T.green, b: `${T.green}30` }, warning: { bg: T.amberSoft, c: T.amber, b: `${T.amber}30` }, error: { bg: T.redSoft, c: T.red, b: `${T.red}30` }, info: { bg: T.accentSoft, c: T.accent, b: `${T.accent}30` }, neutral: { bg: `${T.textFaint}20`, c: T.textMuted, b: T.border }, accent: { bg: T.accentSoft, c: T.accent, b: `${T.accent}30` } };
   const { bg, c, b } = m[type] || m.neutral;
-  return <span style={{ display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: "100px", fontSize: "11px", fontWeight: "700", fontFamily: font, background: bg, color: c, border: `1px solid ${b}`, letterSpacing: "0.03em" }}>{children}</span>;
+  return <span style={{ display: "inline-flex", alignItems: "center", padding: `3px ${T.sp8}px`, borderRadius: "100px", fontSize: `${T.fontCaption}px`, fontWeight: "700", fontFamily: font, background: bg, color: c, border: `1px solid ${b}`, letterSpacing: "0.03em" }}>{children}</span>;
 }
 
 function Chip({ children, active, color, onClick, dimmed, small }) {
   const cl = color || T.accent;
-  return <button onClick={onClick} style={{ ...btnBase, display: "inline-flex", alignItems: "center", gap: "6px", padding: small ? "6px 12px" : "10px 16px", borderRadius: small ? "8px" : "11px", border: active ? `2px solid ${cl}` : `1.5px solid ${T.border}`, background: active ? `${cl}15` : "transparent", fontSize: small ? "12px" : "13px", fontWeight: active ? "700" : "400", color: active ? cl : (dimmed ? T.textFaint : T.textMuted), opacity: dimmed && !active ? 0.4 : 1, minHeight: small ? "36px" : "44px" }}>
-    {active && <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: cl, boxShadow: `0 0 8px ${cl}60` }} />}
+  return <button onClick={onClick} style={{ ...btnBase, display: "inline-flex", alignItems: "center", gap: `${T.sp4}px`, padding: small ? `${T.sp4}px ${T.sp12}px` : `${T.sp8}px ${T.sp16}px`, borderRadius: "10px", border: active ? `2px solid ${cl}` : `1.5px dashed rgba(26,20,18,0.15)`, background: active ? `${cl}12` : "transparent", fontSize: small ? `${T.fontMono}px` : `${T.fontSmall}px`, fontWeight: active ? "600" : "400", color: active ? T.text : (dimmed ? T.textFaint : T.textMuted), opacity: dimmed && !active ? 0.4 : 1, minHeight: small ? "36px" : "44px" }}>
+    {active && <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: cl }} />}
     {children}
   </button>;
 }
 
 function Input({ value, onChange, placeholder, style }) {
-  return <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ fontFamily: font, fontSize: "14px", padding: "10px 14px", borderRadius: "10px", border: `1.5px solid ${T.border}`, background: T.bgInput, color: T.text, outline: "none", width: "100%", transition: "border 0.2s", minHeight: "44px", ...style }} onFocus={e => e.target.style.borderColor = T.accent} onBlur={e => e.target.style.borderColor = T.border} />;
+  return <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ fontFamily: font, fontSize: `${T.fontBody}px`, padding: `${T.sp12}px ${T.sp16}px`, borderRadius: `${T.radiusMd}px`, border: `1.5px solid ${T.border}`, background: T.bgInput, color: T.text, outline: "none", width: "100%", transition: "border 200ms cubic-bezier(0.2, 0, 0, 1)", minHeight: "44px", ...style }} onFocus={e => e.target.style.borderColor = T.accent} onBlur={e => e.target.style.borderColor = T.border} />;
 }
 
 function StyledSelect({ value, onChange, children, style }) {
-  return <select value={value} onChange={onChange} style={{ fontFamily: font, fontSize: "13px", fontWeight: "600", padding: "8px 30px 8px 12px", borderRadius: "8px", border: `1px solid ${T.border}`, background: T.bgInput, color: T.text, cursor: "pointer", minHeight: "44px", appearance: "none", WebkitAppearance: "none", colorScheme: "light", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239C8578' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center", ...style }}>{children}</select>;
+  return <select value={value} onChange={onChange} style={{ fontFamily: font, fontSize: `${T.fontSmall}px`, fontWeight: "600", padding: `${T.sp8}px 30px ${T.sp8}px ${T.sp12}px`, borderRadius: `${T.radiusSm}px`, border: `1px solid rgba(26,20,18,0.08)`, background: T.bgInput, color: T.text, cursor: "pointer", minHeight: "44px", appearance: "none", WebkitAppearance: "none", colorScheme: "light", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%237A6B60' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center", ...style }}>{children}</select>;
 }
 
 function SectionHead({ icon, title, sub, right }) {
-  return <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}><div><h2 style={{ fontFamily: font, fontSize: "18px", fontWeight: "800", color: T.text, margin: 0, letterSpacing: "-0.02em" }}>{icon && <span style={{ marginRight: "8px" }}>{icon}</span>}{title}</h2>{sub && <p style={{ fontSize: "13px", color: T.textMuted, margin: "3px 0 0" }}>{sub}</p>}</div>{right}</div>;
+  return <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: `${T.sp16}px` }}><div><h2 style={{ fontFamily: font, fontSize: `${T.fontSection}px`, fontWeight: "700", color: T.text, margin: 0, letterSpacing: "0.01em" }}>{icon && <span style={{ marginRight: `${T.sp8}px` }}>{icon}</span>}{title}</h2>{sub && <p style={{ fontSize: `${T.fontSmall}px`, color: T.textMuted, margin: `${T.sp4}px 0 0` }}>{sub}</p>}</div>{right}</div>;
 }
 
 function StatBox({ value, label, color }) {
-  return <div style={{ textAlign: "center", flex: 1, minWidth: "70px" }}><div style={{ fontFamily: fontMono, fontSize: "24px", fontWeight: "700", color: color || T.accent, lineHeight: 1.1, textShadow: `0 0 20px ${color || T.accent}30` }}>{value}</div><div style={{ fontSize: "10px", color: T.textMuted, fontWeight: "700", marginTop: "5px", textTransform: "uppercase", letterSpacing: "1px" }}>{label}</div></div>;
+  return <div style={{ textAlign: "center", flex: 1, minWidth: "70px" }}><div style={{ fontFamily: fontMono, fontSize: "24px", fontWeight: "700", color: color || T.accent, lineHeight: 1.1 }}>{value}</div><div style={{ fontSize: `${T.fontCaption}px`, color: T.textMuted, fontWeight: "700", marginTop: `${T.sp4}px`, textTransform: "uppercase", letterSpacing: "1px" }}>{label}</div></div>;
 }
 
 function SlotBar({ slotKey }) { return <div style={{ width: "4px", height: "28px", borderRadius: "2px", background: slotColors[slotKey] || T.accent, boxShadow: `0 0 8px ${slotColors[slotKey] || T.accent}40`, flexShrink: 0 }} />; }
@@ -158,7 +158,7 @@ function SlotBar({ slotKey }) { return <div style={{ width: "4px", height: "28px
 // ─── MODALS ────────────────────────────────────────────────────────────────
 function Overlay({ children, onClose }) {
   const mobile = window.innerWidth < 480;
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(80,50,30,0.35)", display: "flex", alignItems: mobile ? "flex-end" : "center", justifyContent: "center", padding: mobile ? "0" : "16px", backdropFilter: "blur(8px)" }}><div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: mobile ? "100%" : "540px", maxHeight: mobile ? "95vh" : "92vh", overflowY: "auto", borderRadius: mobile ? "18px 18px 0 0" : undefined }}>{children}</div></div>;
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(26,20,18,0.4)", display: "flex", alignItems: mobile ? "flex-end" : "center", justifyContent: "center", padding: mobile ? "0" : `${T.sp16}px`, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}><div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: mobile ? "100%" : "540px", maxHeight: mobile ? "85vh" : "92vh", overflowY: "auto", borderRadius: mobile ? `${T.radiusXl}px ${T.radiusXl}px 0 0` : `${T.radiusXl}px` }}>{mobile && <div style={{ width: "40px", height: "4px", background: T.textFaint, borderRadius: "2px", margin: `${T.sp12}px auto ${T.sp4}px` }} />}{children}</div></div>;
 }
 
 function WelcomeModal({ onClose }) {
@@ -234,7 +234,7 @@ function WeekPlanner({ weekIndex, weekDays, plan, config, onChange, isMobile }) 
   };
 
   return (
-    <Card style={{ marginBottom: "12px", padding: "16px" }} accent={allCanceled ? T.red : null}>
+    <Card style={{ marginBottom: `${T.sp12}px`, padding: `${T.sp16}px` }} accent={allCanceled ? T.red : null}>
       {/* Header */}
       <div
         onClick={isMobile ? () => setCollapsed(c => !c) : undefined}
@@ -521,7 +521,7 @@ function SettingsPanel({ config, onSave, onClose, showToast }) {
   return <Overlay onClose={onClose}><Card style={{ padding: 0, borderRadius: "18px" }}>
     <div style={{ padding: "24px 24px 16px", borderBottom: `1px solid ${T.border}`, background: T.bgRaised, borderRadius: "18px 18px 0 0" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}><h2 style={{ fontFamily: font, fontSize: "20px", fontWeight: "800", margin: 0, color: T.text, letterSpacing: "-0.02em" }}>⚙️ Settings</h2><button onClick={onClose} aria-label="Close settings" style={{ ...btnBase, background: "none", fontSize: "22px", color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>✕</button></div>
-      <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "2px" }}>{tabs.map(t => <button key={t.key} onClick={() => setTab(t.key)} style={{ ...btnBase, padding: "8px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", background: tab === t.key ? `linear-gradient(135deg,${T.accent},${T.accentHover})` : "transparent", color: tab === t.key ? "#fff" : T.textMuted, boxShadow: tab === t.key ? `0 0 12px ${T.accentGlow}` : "none", whiteSpace: "nowrap", letterSpacing: "0.02em", minHeight: "40px" }}>{t.icon} {t.label}</button>)}</div>
+      <div style={{ display: "flex", gap: 0, overflowX: "auto", borderBottom: "1px solid rgba(26,20,18,0.08)" }}>{tabs.map(t => <button key={t.key} onClick={() => setTab(t.key)} style={{ ...btnBase, padding: `${T.sp8}px ${T.sp12}px`, borderRadius: 0, fontSize: `${T.fontMono}px`, fontWeight: tab === t.key ? "600" : "500", background: "transparent", color: tab === t.key ? T.accent : T.textMuted, borderBottom: `2px solid ${tab === t.key ? T.accent : 'transparent'}`, whiteSpace: "nowrap", minHeight: "40px" }}>{t.icon} {t.label}</button>)}</div>
     </div>
     <div style={{ padding: "20px 24px 24px", maxHeight: "55vh", overflowY: "auto" }}>
       {tab === "actors" && (() => { const settingsSorted = [...cfg.actors].sort((a, b) => (cfg.actorSortOrder?.[a] ?? 999) - (cfg.actorSortOrder?.[b] ?? 999)); return <div><p style={{ fontSize: "13px", color: T.textSoft, margin: "0 0 14px" }}>Add, remove, or reorder actors. Removing clears them from all scenarios.</p><div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}><Input value={newActor} onChange={setNewActor} placeholder="New actor name..." style={{ flex: 1 }} /><Btn onClick={addActor}>+ Add</Btn></div>{settingsSorted.map((a, idx) => { const cl = cfg.actorColors[a]; const sc = allSc.filter(s => (cfg.scenarioActors[s] || []).includes(a)).length; return <div key={a} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "12px", border: `1px solid ${T.border}`, background: T.bgRaised, marginBottom: "6px" }}><div style={{ display: "flex", alignItems: "center", gap: "10px" }}><div style={{ display: "flex", flexDirection: "column", gap: "2px" }}><button onClick={() => moveActor(a, -1)} disabled={idx === 0} aria-label={`Move ${a} up`} style={{ ...btnBase, fontSize: "11px", padding: "2px 6px", borderRadius: "6px", background: idx === 0 ? T.bgRaised : T.bgInput, color: idx === 0 ? T.textFaint : T.textSoft, border: `1px solid ${T.border}`, minHeight: "24px", minWidth: "28px", opacity: idx === 0 ? 0.4 : 1 }}>▲</button><button onClick={() => moveActor(a, 1)} disabled={idx === settingsSorted.length - 1} aria-label={`Move ${a} down`} style={{ ...btnBase, fontSize: "11px", padding: "2px 6px", borderRadius: "6px", background: idx === settingsSorted.length - 1 ? T.bgRaised : T.bgInput, color: idx === settingsSorted.length - 1 ? T.textFaint : T.textSoft, border: `1px solid ${T.border}`, minHeight: "24px", minWidth: "28px", opacity: idx === settingsSorted.length - 1 ? 0.4 : 1 }}>▼</button></div><div style={{ width: "32px", height: "32px", borderRadius: "8px", background: `${cl}20`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "700", fontSize: "14px", color: cl }}>{a[0]}</div><div><div style={{ fontWeight: "600", color: T.text, fontSize: "14px" }}>{a}</div><div style={{ fontSize: "11px", color: T.textMuted }}>{sc} scenario{sc !== 1 ? "s" : ""}</div></div></div><div style={{ display: "flex", alignItems: "center", gap: "6px" }}><div style={{ width: "24px", height: "24px", borderRadius: "6px", background: cl, border: `1px solid ${T.border}` }} />{confirmDel === a ? <div style={{ display: "flex", gap: "4px" }}><Btn variant="danger" onClick={() => rmActor(a)}>Yes</Btn><Btn variant="small" onClick={() => setConfirmDel(null)}>No</Btn></div> : <Btn variant="ghost" onClick={() => setConfirmDel(a)} style={{ color: T.red, padding: "4px 8px", minHeight: "36px" }}>×</Btn>}</div></div> })}</div> })()}
@@ -881,7 +881,7 @@ export default function CITScheduler() {
     setMonth(m); setYear(y);
   };
 
-  if (loading) return <div style={{ fontFamily: font, background: T.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ textAlign: "center" }}><div style={{ fontSize: "40px", marginBottom: "12px" }}>🎭</div><p style={{ color: T.textMuted, fontSize: "13px", fontWeight: "600", letterSpacing: "0.5px" }}>LOADING</p></div></div>;
+  if (loading) return <div style={{ fontFamily: font, background: T.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ textAlign: "center" }}><div style={{ fontSize: `${T.fontHero}px`, marginBottom: `${T.sp12}px` }}>🎭</div><p style={{ color: T.textMuted, fontSize: `${T.fontSmall}px`, fontWeight: "600", letterSpacing: "0.05em" }}>LOADING</p></div></div>;
 
   const activeDates = [];
   weeks.forEach((wd, wi) => { const plan = weekPlans[`week${wi}`] || getDefaultWeekPlan(wd, config); SLOT_KEYS.forEach(sk => { if (plan[sk]) activeDates.push(plan[sk]) }) });
@@ -897,36 +897,36 @@ export default function CITScheduler() {
       {showShare && schedule && <ShareModal weeks={weeks} weekPlans={weekPlans} schedule={schedule} monthName={monthName} year={year} config={config} onClose={() => setShowShare(false)} showToast={showT} />}
       {showSettings && <SettingsPanel config={config} onSave={saveConfig} onClose={() => setShowSettings(false)} showToast={showT} />}
       {showPasteMsg && <PasteMessagePanel config={config} availability={availability} activeDates={activeDates} onApply={newAvail => { setAvailability(newAvail); save(newAvail, weekPlans, schedule, errors, overrides, fairnessReport, activeActors); showT("Availability updated ✓", "success"); }} onClose={() => setShowPasteMsg(false)} />}
-      {toast && <div style={{ position: "fixed", top: "80px", left: "50%", transform: "translateX(-50%)", zIndex: 999, padding: "10px 22px", borderRadius: "12px", fontFamily: font, fontSize: "13px", fontWeight: "700", background: toast.type === "success" ? T.green : toast.type === "warning" ? T.amber : toast.type === "error" ? T.red : T.accent, color: "#fff", boxShadow: `0 0 20px ${(toast.type === "success" ? T.green : T.accent)}40`, animation: "slideDown .3s ease", letterSpacing: "0.02em" }}>{toast.msg}</div>}
+      {toast && <div role="alert" aria-live="assertive" style={{ position: "fixed", top: `${T.sp16}px`, left: "50%", transform: "translateX(-50%)", zIndex: 999, padding: `${T.sp12}px ${T.sp20}px`, borderRadius: `${T.radiusMd}px`, fontFamily: font, fontSize: `${T.fontBody}px`, fontWeight: "500", background: T.text, color: T.bg, boxShadow: "0 8px 32px rgba(26,20,18,0.2)", animation: "slideDown .3s cubic-bezier(0.4,0,0.2,1)" }}>{toast.msg}</div>}
 
-      {/* HEADER */}
-      <div style={{ background: `linear-gradient(180deg, ${T.bgRaised} 0%, ${T.bg} 100%)`, borderBottom: `1px solid ${T.border}`, padding: "16px 20px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-          <button onClick={() => setShowWelcome(true)} aria-label="Help" style={{ ...btnBase, background: "none", fontSize: "12px", padding: "6px 10px", color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>❓</button>
-          <div style={{ fontFamily: fontMono, fontSize: "10px", fontWeight: "700", color: T.accent, textTransform: "uppercase", letterSpacing: "3px" }}>CIT SCHEDULER</div>
-          <button onClick={() => setShowSettings(true)} aria-label="Settings" style={{ ...btnBase, background: "none", fontSize: "15px", padding: "6px 10px", color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>⚙️</button>
+      {/* HEADER — frosted glass sticky */}
+      <header style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(250,246,241,0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderBottom: "1px solid rgba(26,20,18,0.06)", padding: `${T.sp16}px ${T.sp20}px` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: `${T.sp12}px` }}>
+          <button onClick={() => setShowWelcome(true)} aria-label="Help" style={{ ...btnBase, background: "none", fontSize: `${T.fontMono}px`, padding: `${T.sp4}px ${T.sp8}px`, color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>❓</button>
+          <div style={{ fontFamily: font, fontSize: `${T.fontCaption}px`, fontWeight: "600", color: T.accent, textTransform: "uppercase", letterSpacing: "0.12em" }}>CIT SCHEDULER</div>
+          <button onClick={() => setShowSettings(true)} aria-label="Settings" style={{ ...btnBase, background: "none", fontSize: `${T.fontCardTitle}px`, padding: `${T.sp4}px ${T.sp8}px`, color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>⚙️</button>
         </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "20px", marginBottom: "12px" }}>
-          <button onClick={() => chgMonth(-1)} aria-label="Previous month" style={{ ...btnBase, background: "none", fontSize: "22px", color: T.textMuted, padding: "4px 10px", minHeight: "44px", minWidth: "44px" }}>‹</button>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: `${T.sp20}px`, marginBottom: `${T.sp12}px` }}>
+          <button onClick={() => chgMonth(-1)} aria-label="Previous month" style={{ ...btnBase, background: "none", fontSize: "22px", color: T.textMuted, padding: `${T.sp4}px ${T.sp8}px`, minHeight: "44px", minWidth: "44px" }}>‹</button>
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontFamily: font, fontSize: "28px", fontWeight: "800", color: T.text, letterSpacing: "-0.03em", lineHeight: 1 }}>{monthName}</div>
-            <div style={{ fontFamily: fontMono, fontSize: "13px", color: T.textMuted, fontWeight: "500", marginTop: "2px" }}>{year}</div>
+            <div style={{ fontFamily: font, fontSize: `${T.fontHero}px`, fontWeight: "700", color: T.text, letterSpacing: "-0.02em", lineHeight: 1 }}>{monthName}</div>
+            <div style={{ fontFamily: fontMono, fontSize: `${T.fontSmall}px`, color: T.textMuted, fontWeight: "500", marginTop: `${T.sp4}px` }}>{year}</div>
           </div>
-          <button onClick={() => chgMonth(1)} aria-label="Next month" style={{ ...btnBase, background: "none", fontSize: "22px", color: T.textMuted, padding: "4px 10px", minHeight: "44px", minWidth: "44px" }}>›</button>
+          <button onClick={() => chgMonth(1)} aria-label="Next month" style={{ ...btnBase, background: "none", fontSize: "22px", color: T.textMuted, padding: `${T.sp4}px ${T.sp8}px`, minHeight: "44px", minWidth: "44px" }}>›</button>
         </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: bp.isMobile ? "16px" : "32px", padding: "6px 0" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: bp.isMobile ? `${T.sp16}px` : `${T.sp32}px`, padding: `${T.sp4}px 0` }}>
           <StatBox value={weeks.length} label="Weeks" color={T.accent} />
           <StatBox value={activeDates.length} label="Active" color={T.mint} />
           <StatBox value={schedule ? `${filledSlots}/${totalSlots}` : "—"} label="Filled" color={filledSlots === totalSlots ? T.green : T.amber} />
         </div>
-      </div>
+      </header>
 
       {/* NAV */}
-      <div role="tablist" style={{ display: "flex", gap: "4px", padding: bp.isMobile ? "8px 8px" : "10px 12px", overflowX: "auto", borderBottom: `1px solid ${T.border}`, background: T.bgCard }}>
-        {navItems.map(n => <button key={n.key} role="tab" aria-selected={view === n.key} onClick={() => setView(n.key)} style={{ ...btnBase, padding: "8px 14px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", whiteSpace: "nowrap", letterSpacing: "0.03em", background: view === n.key ? `linear-gradient(135deg,${T.accent},${T.accentHover})` : "transparent", color: view === n.key ? "#fff" : T.textMuted, boxShadow: view === n.key ? `0 0 14px ${T.accentGlow}` : "none", minHeight: "44px" }}>{n.icon} {n.label}</button>)}
-      </div>
+      <nav role="tablist" style={{ display: "flex", gap: 0, padding: `0 ${T.sp16}px`, overflowX: "auto", borderBottom: "1px solid rgba(26,20,18,0.08)", background: T.bgCard }}>
+        {navItems.map(n => <button key={n.key} role="tab" aria-selected={view === n.key} onClick={() => setView(n.key)} style={{ ...btnBase, padding: `${T.sp12}px ${T.sp16}px`, borderRadius: 0, fontSize: `${T.fontMono}px`, fontWeight: view === n.key ? "600" : "500", whiteSpace: "nowrap", background: "transparent", color: view === n.key ? T.accent : T.textMuted, borderBottom: `2px solid ${view === n.key ? T.accent : 'transparent'}`, minHeight: "44px" }}>{n.icon} {n.label}</button>)}
+      </nav>
 
-      <div style={{ padding: bp.isMobile ? "12px" : "16px", maxWidth: bp.isWide ? "960px" : bp.isDesktop ? "800px" : "720px", margin: "0 auto" }}>
+      <main style={{ padding: bp.isMobile ? `${T.sp16}px` : `${T.sp24}px`, maxWidth: bp.isDesktop ? "720px" : bp.isTablet ? "640px" : "100%", margin: "0 auto" }}>
 
         {/* ═══ PLAN TAB ═══ */}
         {view === "plan" && <div>
@@ -1003,9 +1003,9 @@ export default function CITScheduler() {
           </Card>
 
           {/* View toggle: Compact / Matrix */}
-          <div style={{ display: "flex", gap: "4px", marginBottom: "14px" }}>
-            <button onClick={() => setAvailView("compact")} style={{ ...btnBase, flex: 1, padding: "10px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", background: availView === "compact" ? `linear-gradient(135deg,${T.accent},${T.accentHover})` : T.bgRaised, color: availView === "compact" ? "#fff" : T.textMuted, border: `1px solid ${availView === "compact" ? T.accent : T.border}`, minHeight: "44px" }}>📋 Compact</button>
-            <button onClick={() => setAvailView("matrix")} style={{ ...btnBase, flex: 1, padding: "10px", borderRadius: "10px", fontSize: "12px", fontWeight: "700", background: availView === "matrix" ? `linear-gradient(135deg,${T.accent},${T.accentHover})` : T.bgRaised, color: availView === "matrix" ? "#fff" : T.textMuted, border: `1px solid ${availView === "matrix" ? T.accent : T.border}`, minHeight: "44px" }}>📊 Matrix</button>
+          <div style={{ display: "flex", gap: `${T.sp4}px`, marginBottom: `${T.sp16}px` }}>
+            <button onClick={() => setAvailView("compact")} style={{ ...btnBase, flex: 1, padding: `${T.sp8}px`, borderRadius: `${T.radiusSm}px`, fontSize: `${T.fontMono}px`, fontWeight: "600", background: availView === "compact" ? T.bgInput : "transparent", color: availView === "compact" ? T.text : T.textMuted, border: `1px solid ${availView === "compact" ? 'rgba(26,20,18,0.08)' : 'transparent'}`, minHeight: "44px" }}>📋 Compact</button>
+            <button onClick={() => setAvailView("matrix")} style={{ ...btnBase, flex: 1, padding: `${T.sp8}px`, borderRadius: `${T.radiusSm}px`, fontSize: `${T.fontMono}px`, fontWeight: "600", background: availView === "matrix" ? T.bgInput : "transparent", color: availView === "matrix" ? T.text : T.textMuted, border: `1px solid ${availView === "matrix" ? 'rgba(26,20,18,0.08)' : 'transparent'}`, minHeight: "44px" }}>📊 Matrix</button>
           </div>
 
           {availView === "matrix" && <Card style={{ marginBottom: "16px", padding: bp.isMobile ? "8px" : "14px" }}>
@@ -1051,8 +1051,8 @@ export default function CITScheduler() {
               })}
             </div>;
           })}
-          <div style={{ height: "80px" }} />
-          <div style={{ position: "sticky", bottom: "16px", textAlign: "center", padding: "12px 8px", background: `linear-gradient(to top, ${T.bg} 60%, transparent)`, borderRadius: "16px" }}><Btn onClick={handleGenerate} disabled={generating} style={{ width: "100%", maxWidth: "400px", padding: "16px", fontSize: "15px", borderRadius: "14px", boxShadow: `0 0 32px ${T.accentGlow}, 0 4px 12px rgba(180,140,110,0.15)` }}>{generating ? "Generating..." : "⚡ Generate Schedule"}</Btn></div>
+          <div style={{ height: `${T.sp64}px` }} />
+          <div style={{ position: "sticky", bottom: `${T.sp16}px`, textAlign: "center", padding: `${T.sp12}px ${T.sp8}px`, background: "rgba(250,246,241,0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: `${T.radiusLg}px`, border: "1px solid rgba(26,20,18,0.06)" }}><Btn onClick={handleGenerate} disabled={generating} style={{ width: "100%", maxWidth: "400px", padding: `${T.sp16}px`, fontSize: `${T.fontCardTitle}px`, borderRadius: `${T.radiusMd}px`, boxShadow: T.shadowAccent }}>{generating ? "Generating..." : "⚡ Generate Schedule"}</Btn></div>
         </div>}
 
         {/* ═══ SCHEDULE TAB ═══ */}
@@ -1141,20 +1141,20 @@ export default function CITScheduler() {
           <Card style={{ marginBottom: "10px" }}><h3 style={{ fontSize: "15px", fontWeight: "700", margin: "0 0 10px" }}>📝 Monthly Flow</h3><div style={{ fontSize: "13px", color: T.textSoft, lineHeight: 1.9 }}>{["By 15th — get actor availability", "Set up week plans (adjust for cancellations)", "Enter availability", "Generate schedule", "Review & adjust swaps", "Export to Google Calendar", "Share with actors"].map((s, i) => <p key={i} style={{ margin: "0 0 2px" }}>☐ {s}</p>)}</div></Card>
           <Card><h3 style={{ fontSize: "15px", fontWeight: "700", margin: "0 0 10px" }}>💡 Tips</h3><div style={{ fontSize: "13px", color: T.textSoft, lineHeight: 1.7 }}><p style={{ margin: "0 0 4px" }}><strong style={{ color: T.text }}>Snowstorm?</strong> Use the Plan tab to shift all days forward with ▶, or cancel the whole week.</p><p style={{ margin: "0 0 4px" }}><strong style={{ color: T.text }}>New actor?</strong> ⚙️ Settings → Actors → add them, then assign to scenarios.</p><p style={{ margin: "0 0 4px" }}><strong style={{ color: T.text }}>Scenario change?</strong> ⚙️ Settings → Scenarios to update who's approved.</p><p style={{ margin: 0 }}><strong style={{ color: T.text }}>Text actors</strong> via Share → pick Individual → select actor → copy.</p></div></Card>
         </div>}
-      </div>
+      </main>
 
       <style>{`
         @keyframes slideDown{from{transform:translateX(-50%) translateY(-20px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
         @media(prefers-reduced-motion:reduce){*{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
         select:focus,button:focus{outline:2px solid ${T.accent}40;outline-offset:2px}
-        button:active{transform:scale(0.97)}
+        button:active{transform:scale(0.97);transition:transform 100ms}
         select{color-scheme:light}
         option{background:${T.bgInput};color:${T.text}}
-        html{scrollbar-width:thin;scrollbar-color:${T.coral} ${T.bgRaised}}
-        ::-webkit-scrollbar{width:12px;height:12px}
-        ::-webkit-scrollbar-track{background:${T.bgRaised};border-radius:6px}
-        ::-webkit-scrollbar-thumb{background:${T.coral};border-radius:6px;border:3px solid ${T.bgRaised};min-height:40px}
-        ::-webkit-scrollbar-thumb:hover{background:#E8917A}
+        html{scrollbar-width:thin;scrollbar-color:${T.border} ${T.bg}}
+        ::-webkit-scrollbar{width:8px;height:8px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{background:${T.border};border-radius:4px}
+        ::-webkit-scrollbar-thumb:hover{background:${T.textFaint}}
         @media(max-width:480px){
           body{overflow-x:hidden}
         }
