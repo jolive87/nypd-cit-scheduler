@@ -112,6 +112,13 @@ export const T = {
   shadowCard: "0 1px 3px rgba(26,20,18,0.04), 0 4px 12px rgba(26,20,18,0.03)",
   shadowElevated: "0 2px 8px rgba(26,20,18,0.06), 0 8px 24px rgba(26,20,18,0.04)",
   shadowAccent: "0 2px 8px rgba(212,96,58,0.25)",
+
+  // Motion tokens
+  dFast: "150ms",
+  dNormal: "300ms",
+  dSlow: "500ms",
+  easeProductive: "cubic-bezier(0.2, 0, 0, 1)",
+  easeExpressive: "cubic-bezier(0.4, 0, 0.2, 1)",
 };
 
 export const slotColors = { slot1: T.coral, slot2: T.gold, slot3: T.mint };

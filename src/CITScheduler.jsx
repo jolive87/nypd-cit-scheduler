@@ -4,6 +4,25 @@ import { DEFAULT_CONFIG, ALL_WEEKDAYS, COLOR_PALETTE, ICON_OPTIONS, T, slotColor
 import { generateSchedule, getActorStats, genShareText, genActorMsg, getDefaultWeekPlan, fmtDate, fmtDateShort, normalizeAvail, SLOT_KEYS, SHIFTS } from "./scheduler.js";
 import { generateICS, downloadICS } from "./ics.js";
 
+// ─── CSS KEYFRAMES (injected once) ──────────────────────────────────────────
+const KEYFRAMES_ID = "cit-keyframes";
+if (typeof document !== "undefined" && !document.getElementById(KEYFRAMES_ID)) {
+  const s = document.createElement("style");
+  s.id = KEYFRAMES_ID;
+  s.textContent = `
+@keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeSlideOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-4px); } }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, -20px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes toastOut { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, -12px); } }
+@keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes chipPop { 0% { transform: scale(0.92); } 50% { transform: scale(1.04); } 100% { transform: scale(1); } }
+@keyframes cardStagger { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+`;
+  document.head.appendChild(s);
+}
+
 // ─── RESPONSIVE HOOK ────────────────────────────────────────────────────────
 function useBreakpoint() {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 800);
@@ -105,7 +124,7 @@ async function copyToClipboard(text) {
 }
 
 // ─── UI BUILDING BLOCKS ────────────────────────────────────────────────────
-const btnBase = { fontFamily: font, border: "none", cursor: "pointer", transition: "all 150ms cubic-bezier(0.2, 0, 0, 1)", letterSpacing: "0.01em" };
+const btnBase = { fontFamily: font, border: "none", cursor: "pointer", transition: `all ${T.dFast} ${T.easeProductive}`, letterSpacing: "0.01em" };
 
 function Btn({ children, variant = "primary", onClick, style, disabled, "aria-label": ariaLabel }) {
   const v = {
@@ -120,7 +139,7 @@ function Btn({ children, variant = "primary", onClick, style, disabled, "aria-la
 }
 
 function Card({ children, style, elevated, accent }) {
-  return <div style={{ background: T.bgCard, borderRadius: `${T.radiusLg}px`, padding: `${T.sp24}px`, border: `1px solid ${accent ? `${accent}25` : 'rgba(26,20,18,0.06)'}`, boxShadow: elevated ? T.shadowElevated : T.shadowCard, transition: "all 200ms cubic-bezier(0.2, 0, 0, 1)", ...style }}>{children}</div>;
+  return <div style={{ background: T.bgCard, borderRadius: `${T.radiusLg}px`, padding: `${T.sp24}px`, border: `1px solid ${accent ? `${accent}25` : 'rgba(26,20,18,0.06)'}`, boxShadow: elevated ? T.shadowElevated : T.shadowCard, transition: `all ${T.dFast} ${T.easeProductive}`, ...style }}>{children}</div>;
 }
 
 function Badge({ type = "neutral", children }) {
@@ -131,14 +150,21 @@ function Badge({ type = "neutral", children }) {
 
 function Chip({ children, active, color, onClick, dimmed, small }) {
   const cl = color || T.accent;
-  return <button onClick={onClick} style={{ ...btnBase, display: "inline-flex", alignItems: "center", gap: `${T.sp4}px`, padding: small ? `${T.sp4}px ${T.sp12}px` : `${T.sp8}px ${T.sp16}px`, borderRadius: "10px", border: active ? `2px solid ${cl}` : `1.5px dashed rgba(26,20,18,0.15)`, background: active ? `${cl}12` : "transparent", fontSize: small ? `${T.fontMono}px` : `${T.fontSmall}px`, fontWeight: active ? "600" : "400", color: active ? T.text : (dimmed ? T.textFaint : T.textMuted), opacity: dimmed && !active ? 0.4 : 1, minHeight: small ? "36px" : "44px" }}>
-    {active && <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: cl }} />}
+  const handleClick = (e) => {
+    e.currentTarget.style.animation = "none";
+    // Force reflow to restart animation
+    void e.currentTarget.offsetWidth;
+    e.currentTarget.style.animation = `chipPop ${T.dFast} ${T.easeExpressive}`;
+    onClick?.();
+  };
+  return <button onClick={handleClick} style={{ ...btnBase, display: "inline-flex", alignItems: "center", gap: `${T.sp4}px`, padding: small ? `${T.sp4}px ${T.sp12}px` : `${T.sp8}px ${T.sp16}px`, borderRadius: "10px", border: active ? `2px solid ${cl}` : `1.5px dashed rgba(26,20,18,0.15)`, background: active ? `${cl}12` : "transparent", fontSize: small ? `${T.fontMono}px` : `${T.fontSmall}px`, fontWeight: active ? "600" : "400", color: active ? T.text : (dimmed ? T.textFaint : T.textMuted), opacity: dimmed && !active ? 0.4 : 1, minHeight: small ? "36px" : "44px", transition: `background ${T.dFast} ${T.easeProductive}, border ${T.dFast} ${T.easeProductive}, color ${T.dFast} ${T.easeProductive}` }}>
+    {active && <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: cl, transition: `transform ${T.dFast} ${T.easeExpressive}` }} />}
     {children}
   </button>;
 }
 
 function Input({ value, onChange, placeholder, style }) {
-  return <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ fontFamily: font, fontSize: `${T.fontBody}px`, padding: `${T.sp12}px ${T.sp16}px`, borderRadius: `${T.radiusMd}px`, border: `1.5px solid ${T.border}`, background: T.bgInput, color: T.text, outline: "none", width: "100%", transition: "border 200ms cubic-bezier(0.2, 0, 0, 1)", minHeight: "44px", ...style }} onFocus={e => e.target.style.borderColor = T.accent} onBlur={e => e.target.style.borderColor = T.border} />;
+  return <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ fontFamily: font, fontSize: `${T.fontBody}px`, padding: `${T.sp12}px ${T.sp16}px`, borderRadius: `${T.radiusMd}px`, border: `1.5px solid ${T.border}`, background: T.bgInput, color: T.text, outline: "none", width: "100%", transition: `border ${T.dFast} ${T.easeProductive}`, minHeight: "44px", ...style }} onFocus={e => e.target.style.borderColor = T.accent} onBlur={e => e.target.style.borderColor = T.border} />;
 }
 
 function StyledSelect({ value, onChange, children, style }) {
@@ -187,7 +213,7 @@ function Overlay({ children, onClose }) {
     };
   }, [onClose]);
 
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(26,20,18,0.4)", display: "flex", alignItems: mobile ? "flex-end" : "center", justifyContent: "center", padding: mobile ? "0" : `${T.sp16}px`, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}><div ref={overlayRef} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{ width: "100%", maxWidth: mobile ? "100%" : "540px", maxHeight: mobile ? "85vh" : "92vh", overflowY: "auto", borderRadius: mobile ? `${T.radiusXl}px ${T.radiusXl}px 0 0` : `${T.radiusXl}px` }}>{mobile && <div style={{ width: "40px", height: "4px", background: T.textFaint, borderRadius: "2px", margin: `${T.sp12}px auto ${T.sp4}px` }} />}{children}</div></div>;
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(26,20,18,0.4)", display: "flex", alignItems: mobile ? "flex-end" : "center", justifyContent: "center", padding: mobile ? "0" : `${T.sp16}px`, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", animation: `overlayIn 200ms ${T.easeExpressive}` }}><div ref={overlayRef} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{ width: "100%", maxWidth: mobile ? "100%" : "540px", maxHeight: mobile ? "85vh" : "92vh", overflowY: "auto", borderRadius: mobile ? `${T.radiusXl}px ${T.radiusXl}px 0 0` : `${T.radiusXl}px`, animation: mobile ? `sheetUp ${T.dNormal} ${T.easeExpressive}` : `fadeSlideIn ${T.dNormal} ${T.easeExpressive}` }}>{mobile && <div style={{ width: "40px", height: "4px", background: T.textFaint, borderRadius: "2px", margin: `${T.sp12}px auto ${T.sp4}px` }} />}{children}</div></div>;
 }
 
 function WelcomeModal({ onClose }) {
@@ -477,7 +503,7 @@ function SupervisorMatrix({ actors, activeDates, availability, weekPlans, weeks,
                         color: on ? '#fff' : T.textFaint,
                         border: `1.5px solid ${on ? (shift === 'AM' ? `${T.green}80` : `${T.purple}80`) : T.border}`,
                         fontSize: 11, fontWeight: 700, touchAction: 'none',
-                        transition: 'background-color 0.1s',
+                        transition: `background-color ${T.dFast} ${T.easeProductive}`,
                       }}
                     >
                       {on ? '✓' : ''}
@@ -710,6 +736,7 @@ export default function CITScheduler() {
   const [schedule, setSchedule] = useState(null);
   const [errors, setErrors] = useState([]);
   const [view, setView] = useState("plan");
+  const [tabAnim, setTabAnim] = useState(false);
   const [overrides, setOverrides] = useState({});
   const [activeActors, setActiveActors] = useState({});
   const [loading, setLoading] = useState(true);
@@ -717,8 +744,11 @@ export default function CITScheduler() {
   const [showShare, setShowShare] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState(null);
+  const [toastExiting, setToastExiting] = useState(false);
+  const toastTimer = useRef(null);
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [scheduleReveal, setScheduleReveal] = useState(0);
   const [showPasteMsg, setShowPasteMsg] = useState(false);
   const [fairnessReport, setFairnessReport] = useState(null);
   const [availView, setAvailView] = useState("compact");
@@ -729,7 +759,21 @@ export default function CITScheduler() {
   // 1-based month for storage key
   const sKey = `cit-v4-${year}-${String(month + 1).padStart(2, '0')}`;
 
-  const showT = (msg, type = "info") => { setToast({ msg, type }); setTimeout(() => setToast(null), 2500) };
+  const showT = (msg, type = "info") => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToastExiting(false);
+    setToast({ msg, type });
+    toastTimer.current = setTimeout(() => {
+      setToastExiting(true);
+      setTimeout(() => { setToast(null); setToastExiting(false); }, 150);
+    }, 2500);
+  };
+
+  const switchView = (v) => {
+    if (v === view) return;
+    setTabAnim(true);
+    setTimeout(() => { setView(v); setTabAnim(false); }, 100);
+  };
 
   useEffect(() => {
     (async () => {
@@ -871,7 +915,8 @@ export default function CITScheduler() {
         ),
       };
       const { schedule: s, errors: e, fairnessReport: fr } = generateSchedule(weeks, weekPlans, availability, filteredConfig);
-      setSchedule(s); setErrors(e); setFairnessReport(fr); setView("schedule");
+      setScheduleReveal(Date.now());
+      setSchedule(s); setErrors(e); setFairnessReport(fr); switchView("schedule");
       save(availability, weekPlans, s, e, overrides, fr, activeActors);
       setGenerating(false);
       if (!e.length) showT("All slots filled", "success");
@@ -923,13 +968,13 @@ export default function CITScheduler() {
   return (
     <div style={{ fontFamily: font, background: T.bg, minHeight: "100vh", paddingBottom: "100px", color: T.text }}>
       {/* Skip to content — visible on focus for keyboard users */}
-      <a href="#main-content" style={{ position: "absolute", top: "-40px", left: 0, background: T.accent, color: "#fff", padding: `${T.sp8}px ${T.sp16}px`, zIndex: 200, fontSize: `${T.fontBody}px`, fontWeight: "600", borderRadius: `0 0 ${T.radiusSm}px ${T.radiusSm}px`, transition: "top 150ms" }} onFocus={e => e.target.style.top = "0"} onBlur={e => e.target.style.top = "-40px"}>Skip to content</a>
+      <a href="#main-content" style={{ position: "absolute", top: "-40px", left: 0, background: T.accent, color: "#fff", padding: `${T.sp8}px ${T.sp16}px`, zIndex: 200, fontSize: `${T.fontBody}px`, fontWeight: "600", borderRadius: `0 0 ${T.radiusSm}px ${T.radiusSm}px`, transition: `top ${T.dFast} ${T.easeProductive}` }} onFocus={e => e.target.style.top = "0"} onBlur={e => e.target.style.top = "-40px"}>Skip to content</a>
 
       {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
       {showShare && schedule && <ShareModal weeks={weeks} weekPlans={weekPlans} schedule={schedule} monthName={monthName} year={year} config={config} onClose={() => setShowShare(false)} showToast={showT} />}
       {showSettings && <SettingsPanel config={config} onSave={saveConfig} onClose={() => setShowSettings(false)} showToast={showT} />}
       {showPasteMsg && <PasteMessagePanel config={config} availability={availability} activeDates={activeDates} onApply={newAvail => { setAvailability(newAvail); save(newAvail, weekPlans, schedule, errors, overrides, fairnessReport, activeActors); showT("Availability updated ✓", "success"); }} onClose={() => setShowPasteMsg(false)} />}
-      {toast && <div role="alert" aria-live="assertive" style={{ position: "fixed", top: `${T.sp16}px`, left: "50%", transform: "translateX(-50%)", zIndex: 999, padding: `${T.sp12}px ${T.sp20}px`, borderRadius: `${T.radiusMd}px`, fontFamily: font, fontSize: `${T.fontBody}px`, fontWeight: "500", background: T.text, color: T.bg, boxShadow: "0 8px 32px rgba(26,20,18,0.2)", animation: "slideDown .3s cubic-bezier(0.4,0,0.2,1)" }}>{toast.msg}</div>}
+      {toast && <div role="alert" aria-live="assertive" style={{ position: "fixed", top: `${T.sp16}px`, left: "50%", transform: "translateX(-50%)", zIndex: 999, padding: `${T.sp12}px ${T.sp20}px`, borderRadius: `${T.radiusMd}px`, fontFamily: font, fontSize: `${T.fontBody}px`, fontWeight: "500", background: T.text, color: T.bg, boxShadow: "0 8px 32px rgba(26,20,18,0.2)", animation: toastExiting ? `toastOut ${T.dFast} ${T.easeProductive} forwards` : `toastIn ${T.dNormal} ${T.easeExpressive}` }}>{toast.msg}</div>}
 
       {/* HEADER — frosted glass sticky */}
       <header style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(250,246,241,0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderBottom: "1px solid rgba(26,20,18,0.06)", padding: `${T.sp16}px ${T.sp20}px` }}>
@@ -955,10 +1000,10 @@ export default function CITScheduler() {
 
       {/* NAV */}
       <nav role="tablist" aria-label="Main navigation" style={{ display: "flex", gap: 0, padding: `0 ${T.sp16}px`, overflowX: "auto", borderBottom: "1px solid rgba(26,20,18,0.08)", background: T.bgCard }}>
-        {navItems.map(n => <button key={n.key} id={`tab-${n.key}`} role="tab" aria-selected={view === n.key} aria-controls={`panel-${n.key}`} tabIndex={view === n.key ? 0 : -1} onClick={() => setView(n.key)} style={{ ...btnBase, padding: `${T.sp12}px ${T.sp16}px`, borderRadius: 0, fontSize: `${T.fontMono}px`, fontWeight: view === n.key ? "600" : "500", whiteSpace: "nowrap", background: "transparent", color: view === n.key ? T.accent : T.textMuted, borderBottom: `2px solid ${view === n.key ? T.accent : 'transparent'}`, minHeight: "44px" }}>{n.icon} {n.label}</button>)}
+        {navItems.map(n => <button key={n.key} id={`tab-${n.key}`} role="tab" aria-selected={view === n.key} aria-controls={`panel-${n.key}`} tabIndex={view === n.key ? 0 : -1} onClick={() => switchView(n.key)} style={{ ...btnBase, padding: `${T.sp12}px ${T.sp16}px`, borderRadius: 0, fontSize: `${T.fontMono}px`, fontWeight: view === n.key ? "600" : "500", whiteSpace: "nowrap", background: "transparent", color: view === n.key ? T.accent : T.textMuted, borderBottom: `2px solid ${view === n.key ? T.accent : 'transparent'}`, minHeight: "44px", transition: `color ${T.dFast} ${T.easeProductive}, border-color ${T.dFast} ${T.easeProductive}` }}>{n.icon} {n.label}</button>)}
       </nav>
 
-      <main id="main-content" style={{ padding: bp.isMobile ? `${T.sp16}px` : `${T.sp24}px`, maxWidth: bp.isDesktop ? "720px" : bp.isTablet ? "640px" : "100%", margin: "0 auto" }}>
+      <main id="main-content" style={{ padding: bp.isMobile ? `${T.sp16}px` : `${T.sp24}px`, maxWidth: bp.isDesktop ? "720px" : bp.isTablet ? "640px" : "100%", margin: "0 auto", opacity: tabAnim ? 0 : 1, transform: tabAnim ? "translateY(4px)" : "translateY(0)", transition: tabAnim ? `opacity 100ms ${T.easeProductive}` : `opacity 200ms ${T.easeExpressive}, transform 200ms ${T.easeExpressive}` }}>
 
         {/* ═══ PLAN TAB ═══ */}
         {view === "plan" && <div id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
@@ -971,7 +1016,7 @@ export default function CITScheduler() {
           {weeks.map((wd, wi) => <WeekPlanner key={wi} weekIndex={wi} weekDays={wd} plan={weekPlans[`week${wi}`]} config={config} onChange={plan => updateWeekPlan(wi, plan)} isMobile={bp.isMobile} />)}
           <div style={{ marginTop: "20px", textAlign: "center" }}>
             <p style={{ fontSize: "13px", color: T.textMuted, marginBottom: "12px" }}>Once your days are set, go to <strong style={{ color: T.text }}>Actors</strong> to mark availability.</p>
-            <Btn onClick={() => setView("availability")}>📋 Set Availability →</Btn>
+            <Btn onClick={() => switchView("availability")}>📋 Set Availability →</Btn>
           </div>
         </div>}
 
@@ -1071,7 +1116,7 @@ export default function CITScheduler() {
                       const shiftLabel = norm === "am" ? "AM" : norm === "pm" ? "PM" : null;
                       return <span key={actor} style={{ position: "relative", display: "inline-flex" }}>
                         <Chip active={isAvail} dimmed={!approvedSet.has(actor) || !isActorActive} color={chipColor} onClick={() => cycleAvailability(ds, actor)}>{!isActorActive && <span style={{ fontSize: "10px", opacity: 0.6 }}>⊘</span>}{actor}</Chip>
-                        {shiftLabel && <span style={{ position: "absolute", top: "-4px", right: "-2px", background: chipColor, color: "#fff", fontSize: "9px", fontWeight: "700", padding: "2px 6px", borderRadius: "6px", textTransform: "uppercase", letterSpacing: "0.05em", lineHeight: 1, pointerEvents: "none" }}>{shiftLabel}</span>}
+                        {shiftLabel && <span style={{ position: "absolute", top: "-4px", right: "-2px", background: chipColor, color: "#fff", fontSize: "9px", fontWeight: "700", padding: "2px 6px", borderRadius: "6px", textTransform: "uppercase", letterSpacing: "0.05em", lineHeight: 1, pointerEvents: "none", animation: `chipPop ${T.dFast} ${T.easeExpressive}` }}>{shiftLabel}</span>}
                       </span>;
                     })}
                   </div>
@@ -1087,12 +1132,12 @@ export default function CITScheduler() {
             </div>;
           })}
           <div style={{ height: `${T.sp64}px` }} />
-          <div style={{ position: "sticky", bottom: `${T.sp16}px`, textAlign: "center", padding: `${T.sp12}px ${T.sp8}px`, background: "rgba(250,246,241,0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: `${T.radiusLg}px`, border: "1px solid rgba(26,20,18,0.06)" }}><Btn onClick={handleGenerate} disabled={generating} style={{ width: "100%", maxWidth: "400px", padding: `${T.sp16}px`, fontSize: `${T.fontCardTitle}px`, borderRadius: `${T.radiusMd}px`, boxShadow: T.shadowAccent }}>{generating ? "Generating..." : "⚡ Generate Schedule"}</Btn></div>
+          <div style={{ position: "sticky", bottom: `${T.sp16}px`, textAlign: "center", padding: `${T.sp12}px ${T.sp8}px`, background: "rgba(250,246,241,0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: `${T.radiusLg}px`, border: "1px solid rgba(26,20,18,0.06)" }}><Btn onClick={handleGenerate} disabled={generating} style={{ width: "100%", maxWidth: "400px", padding: `${T.sp16}px`, fontSize: `${T.fontCardTitle}px`, borderRadius: `${T.radiusMd}px`, boxShadow: T.shadowAccent }}>{generating ? <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><span style={{ width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 600ms linear infinite", display: "inline-block" }} />Generating…</span> : "⚡ Generate Schedule"}</Btn></div>
         </div>}
 
         {/* ═══ SCHEDULE TAB ═══ */}
         {view === "schedule" && <div id="panel-schedule" role="tabpanel" aria-labelledby="tab-schedule">
-          {!schedule ? <Card style={{ textAlign: "center", padding: "48px 20px" }}><div style={{ fontSize: "44px", marginBottom: "10px" }}>📅</div><h3 style={{ fontSize: "17px", fontWeight: "800", color: T.text, margin: "0 0 8px" }}>No schedule yet</h3><p style={{ fontSize: "14px", color: T.textMuted, margin: "0 0 16px" }}>Set your plan and availability first.</p><Btn onClick={() => setView("plan")}>🗓 Go to Plan →</Btn></Card> : <>
+          {!schedule ? <Card style={{ textAlign: "center", padding: "48px 20px" }}><div style={{ fontSize: "44px", marginBottom: "10px" }}>📅</div><h3 style={{ fontSize: "17px", fontWeight: "800", color: T.text, margin: "0 0 8px" }}>No schedule yet</h3><p style={{ fontSize: "14px", color: T.textMuted, margin: "0 0 16px" }}>Set your plan and availability first.</p><Btn onClick={() => switchView("plan")}>🗓 Go to Plan →</Btn></Card> : <>
             {errors.length > 0 && <Card style={{ marginBottom: "14px", border: `1px solid ${T.red}30`, background: T.redSoft }}>
               <p style={{ fontWeight: "700", fontSize: "13px", color: T.red, margin: "0 0 8px" }}>⚠️ {errors.length} unfilled slot{errors.length > 1 ? "s" : ""}</p>
               {errors.map((e, i) => {
@@ -1104,13 +1149,12 @@ export default function CITScheduler() {
                 </div>;
               })}
             </Card>}
-            <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}><Btn onClick={exportICSFile} disabled={exporting} style={{ flex: 1, minWidth: "140px" }}>{exporting ? "Exporting..." : "📥 Google Calendar"}</Btn><Btn variant="secondary" onClick={() => setShowShare(true)} style={{ flex: 1, minWidth: "140px" }}>📤 Share / Text</Btn></div>
             <p style={{ fontSize: "12px", color: T.textMuted, marginBottom: "14px" }}>Dropdowns let you swap any actor. Saves automatically.</p>
             {weeks.map((wd, wi) => {
               const wk = `week${wi}`, plan = weekPlans[wk] || getDefaultWeekPlan(wd, config);
               const activeSlots = SLOT_KEYS.filter(sk => plan[sk] && schedule[wk]?.[sk]);
               if (!activeSlots.length) return <Card key={wi} style={{ marginBottom: "8px", opacity: 0.5 }}><span style={{ fontFamily: fontMono, fontSize: "11px", color: T.textMuted }}>WK{wi + 1}</span> <Badge type="error">CANCELED</Badge></Card>;
-              return <div key={wi} style={{ marginBottom: "20px" }}>
+              return <div key={`${wi}-${scheduleReveal}`} style={{ marginBottom: "20px", animation: scheduleReveal ? `cardStagger ${T.dNormal} ${T.easeExpressive} both` : "none", animationDelay: scheduleReveal ? `${wi * 50}ms` : "0ms" }}>
                 <div style={{ fontFamily: fontMono, fontSize: "11px", fontWeight: "700", color: T.textMuted, letterSpacing: "1.5px", marginBottom: "8px" }}>WEEK {wi + 1}</div>
                 {activeSlots.map(sk => {
                   const ds = plan[sk], di = wd.find(w => w.date === ds);
@@ -1130,7 +1174,7 @@ export default function CITScheduler() {
                           return (norm === "am" && shift === "AM") || (norm === "pm" && shift === "PM");
                         });
                         const acColor = actor ? (config.actorColors[actor] || T.textSoft) : null;
-                        return <div key={sc} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: "10px", marginBottom: "4px", background: actor ? `${acColor}08` : T.redSoft, border: `1px solid ${actor ? `${acColor}20` : `${T.red}20`}` }}>
+                        return <div key={sc} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: "10px", marginBottom: "4px", background: actor ? `${acColor}08` : T.redSoft, border: `1px solid ${actor ? `${acColor}20` : `${T.red}20`}`, transition: `background ${T.dFast} ${T.easeProductive}` }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ fontSize: "15px" }}>{config.scenarioIcons[sc] || "🎭"}</span><span style={{ fontSize: "13px", fontWeight: "600" }}>{sc}</span></div>
                           <StyledSelect value={actor || ""} onChange={e => handleOverride(wk, sk, shift, sc, e.target.value || null)} style={{ minWidth: "110px" }}>
                             <option value="">— pick —</option>
@@ -1145,6 +1189,8 @@ export default function CITScheduler() {
                 })}
               </div>;
             })}
+            <div style={{ height: `${T.sp64}px` }} />
+            <div style={{ position: "sticky", bottom: `${T.sp16}px`, display: "flex", gap: "8px", padding: `${T.sp12}px`, background: "rgba(250,246,241,0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: `${T.radiusLg}px`, border: "1px solid rgba(26,20,18,0.06)", zIndex: 10 }}><Btn onClick={exportICSFile} disabled={exporting} style={{ flex: 1, minWidth: "120px" }}>{exporting ? "Exporting..." : "📥 Calendar"}</Btn><Btn variant="secondary" onClick={() => setShowShare(true)} style={{ flex: 1, minWidth: "120px" }}>📤 Share</Btn></div>
           </>}
         </div>}
 
@@ -1164,7 +1210,7 @@ export default function CITScheduler() {
               {fi?.gapExplanation && <div style={{ fontSize: "11px", color: badgeColor, marginTop: "6px", padding: "4px 8px", borderRadius: "6px", background: `${badgeColor}08`, border: `1px solid ${badgeColor}15` }}>{fi.gapCategory === 'under_structural' ? '📌' : fi.gapCategory === 'over' ? '📈' : '⚠️'} {fi.gapExplanation}</div>}
             </Card>;
           })}
-          {schedule && (() => { const mx = Math.max(...config.actors.map(a => (actorStats[a] || { total: 0 }).total), 1); const targetPct = fairnessReport ? (fairnessReport.fairTarget / mx) * 100 : 0; return <Card style={{ marginTop: "14px", background: T.accentSoft }}><SectionHead icon="⚖️" title="Balance" /><div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>{config.actors.filter(a => (actorStats[a] || { total: 0 }).total > 0).sort((a, b) => (actorStats[b]?.total || 0) - (actorStats[a]?.total || 0)).map(actor => { const s = actorStats[actor] || { total: 0 }; const pct = (s.total / mx) * 100; const cl = config.actorColors[actor] || T.accent; return <div key={actor} style={{ flex: "1 0 45%", minWidth: "140px" }}><div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }}><span style={{ fontWeight: "600" }}>{actor}</span><span style={{ fontFamily: fontMono, color: T.textMuted, fontSize: "11px" }}>{s.total}</span></div><div style={{ position: "relative", height: "8px", borderRadius: "4px", background: T.border, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct}%`, borderRadius: "4px", background: `linear-gradient(90deg,${cl},${cl}BB)`, boxShadow: `0 0 8px ${cl}30`, transition: "width 0.4s" }} />{fairnessReport && <div style={{ position: "absolute", left: `${targetPct}%`, top: "-2px", bottom: "-2px", width: "2px", background: T.textMuted, opacity: 0.5, borderRadius: "1px" }} />}</div></div> })}</div>{fairnessReport && <div style={{ fontSize: "11px", color: T.textMuted, marginTop: "8px", textAlign: "center" }}>Target: ~{Math.round(fairnessReport.fairTarget)} shifts</div>}</Card>; })()}
+          {schedule && (() => { const mx = Math.max(...config.actors.map(a => (actorStats[a] || { total: 0 }).total), 1); const targetPct = fairnessReport ? (fairnessReport.fairTarget / mx) * 100 : 0; return <Card style={{ marginTop: "14px", background: T.accentSoft }}><SectionHead icon="⚖️" title="Balance" /><div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>{config.actors.filter(a => (actorStats[a] || { total: 0 }).total > 0).sort((a, b) => (actorStats[b]?.total || 0) - (actorStats[a]?.total || 0)).map(actor => { const s = actorStats[actor] || { total: 0 }; const pct = (s.total / mx) * 100; const cl = config.actorColors[actor] || T.accent; return <div key={actor} style={{ flex: "1 0 45%", minWidth: "140px" }}><div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }}><span style={{ fontWeight: "600" }}>{actor}</span><span style={{ fontFamily: fontMono, color: T.textMuted, fontSize: "11px" }}>{s.total}</span></div><div style={{ position: "relative", height: "8px", borderRadius: "4px", background: T.border, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct}%`, borderRadius: "4px", background: `linear-gradient(90deg,${cl},${cl}BB)`, boxShadow: `0 0 8px ${cl}30`, transition: `width ${T.dSlow} ${T.easeExpressive}` }} />{fairnessReport && <div style={{ position: "absolute", left: `${targetPct}%`, top: "-2px", bottom: "-2px", width: "2px", background: T.textMuted, opacity: 0.5, borderRadius: "1px" }} />}</div></div> })}</div>{fairnessReport && <div style={{ fontSize: "11px", color: T.textMuted, marginTop: "8px", textAlign: "center" }}>Target: ~{Math.round(fairnessReport.fairTarget)} shifts</div>}</Card>; })()}
         </div>}
 
         {/* ═══ REFERENCE TAB ═══ */}
@@ -1179,10 +1225,9 @@ export default function CITScheduler() {
       </main>
 
       <style>{`
-        @keyframes slideDown{from{transform:translateX(-50%) translateY(-20px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
         @media(prefers-reduced-motion:reduce){*{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
         select:focus,button:focus{outline:2px solid ${T.accent}40;outline-offset:2px}
-        button:active{transform:scale(0.97);transition:transform 100ms}
+        button:active{transform:scale(0.97);transition:transform ${T.dFast}}
         select{color-scheme:light}
         option{background:${T.bgInput};color:${T.text}}
         html{scrollbar-width:thin;scrollbar-color:${T.border} ${T.bg}}
