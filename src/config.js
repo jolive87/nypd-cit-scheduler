@@ -2,9 +2,9 @@
 export const DEFAULT_CONFIG = {
   actors: ["Decatur","Sat Charn","Mara","Rumi","Rich","Antonia","Doc","Qurrat","Nicole","Edwin","Chris"],
   actorColors: {
-    "Decatur":"#D47B65","Sat Charn":"#6BAA9C","Mara":"#6A9EB5","Rumi":"#D4A054",
-    "Rich":"#7CB88A","Antonia":"#D9897E","Doc":"#7BA8C9","Qurrat":"#B48EBF",
-    "Nicole":"#7DBDA8","Edwin":"#C48A5C","Chris":"#C48A5C"
+    "Decatur":"#B84C3A","Sat Charn":"#3A7B6E","Mara":"#4A7BA8","Rumi":"#B8862E",
+    "Rich":"#4A8B5C","Antonia":"#C46B5A","Doc":"#5A7FA0","Qurrat":"#8B5A8B",
+    "Nicole":"#5AA088","Edwin":"#9B7340","Chris":"#6B5A8B"
   },
   scenarioActors: {
     "Mania":["Sat Charn","Doc","Antonia","Mara"],
@@ -38,42 +38,80 @@ export const DEFAULT_CONFIG = {
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────
 export const ALL_WEEKDAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
-export const COLOR_PALETTE = ["#D47B65","#6BAA9C","#6A9EB5","#D4A054","#7CB88A","#D9897E","#7BA8C9","#B48EBF","#7DBDA8","#C48A5C","#C27A5A","#A87DB5","#6BAA9C","#C49A6A","#6A94B0","#C9A090","#8FAFC3","#A8D4B8","#E0BAB0","#9BBDD4"];
+export const COLOR_PALETTE = ["#B84C3A","#3A7B6E","#4A7BA8","#B8862E","#4A8B5C","#C46B5A","#5A7FA0","#8B5A8B","#5AA088","#9B7340","#6B5A8B","#7B5A3A","#3A6B7B","#8B6B3A","#5A3A7B","#7B3A5A","#3A8B5A","#5A7B3A","#3A5A8B","#8B3A5A"];
 export const ICON_OPTIONS = ["⚡","🌀","🌧","🛡","🚨","🔄","💙","🧠","🧩","🎭","🔥","💊","🌊","🏥","🫂","🪞","⚠️","🌑","🎪","🩺"];
 
-// ─── THEME (Golden Hour / Sunset) ───────────────────────────────────────────
+// ─── THEME (Warm Frost UI + Premium Minimalism) ─────────────────────────────
 export const T = {
-  bg: "#FFF8F0",
+  // Foundation surfaces
+  bg: "#FAF6F1",
   bgCard: "#FFFFFF",
-  bgRaised: "#FFF1E6",
-  bgInput: "#FFF5EE",
-  border: "#F0D9C6",
-  borderLight: "#F5E6D8",
-  borderFocus: "#E8917A",
-  text: "#3D2B1F",
-  textSoft: "#6B5344",
-  textMuted: "#9C8578",
-  textFaint: "#C4AEA1",
-  accent: "#E8917A",
-  accentHover: "#D47B65",
-  accentSoft: "#E8917A15",
-  accentGlow: "#E8917A30",
-  mint: "#7DBDA8",
-  mintSoft: "#7DBDA815",
-  coral: "#E8917A",
-  coralSoft: "#E8917A15",
-  gold: "#D4A054",
-  goldSoft: "#D4A05415",
-  green: "#7CB88A",
-  greenSoft: "#7CB88A18",
-  red: "#D16B6B",
-  redSoft: "#D16B6B15",
-  amber: "#D4A054",
-  amberSoft: "#D4A05415",
-  purple: "#B48EBF",
-  purpleSoft: "#B48EBF15",
-  sunGold: "#C48A2A",
+  bgRaised: "#FFF7F0",
+  bgInput: "#F5EDE5",
+  border: "#E6DCD3",
+  borderLight: "#F0E8E0",
+  borderFocus: "#D4603A",
+
+  // Text hierarchy (WCAG AA compliant)
+  text: "#1A1412",
+  textSoft: "#4A3D35",
+  textMuted: "#7A6B60",
+  textFaint: "#B5A89E",
+
+  // Accent (burnt sienna)
+  accent: "#D4603A",
+  accentHover: "#C04E2B",
+  accentSoft: "#D4603A12",
+  accentGlow: "#D4603A25",
+
+  // Semantic colors
+  green: "#2D8F62",
+  greenSoft: "#2D8F6218",
+  red: "#C44040",
+  redSoft: "#C4404015",
+  amber: "#C17D24",
+  amberSoft: "#C17D2415",
+  info: "#3A7BBF",
+  infoSoft: "#3A7BBF15",
+
+  // Slot identity colors
+  coral: "#C85A3A",
+  coralSoft: "#C85A3A14",
+  gold: "#8B7A2F",
+  goldSoft: "#8B7A2F14",
+  mint: "#3A7B6E",
+  mintSoft: "#3A7B6E14",
+
+  // Semantic aliases
+  purple: "#8B5A8B",
+  purpleSoft: "#8B5A8B15",
+
+  // Shift indicator colors
+  sunGold: "#B8862E",
   nightIndigo: "#4A3B6B",
+
+  // Typography scale
+  fontHero: 32,
+  fontSection: 16,
+  fontCardTitle: 15,
+  fontBody: 14,
+  fontSmall: 13,
+  fontMono: 12,
+  fontCaption: 11,
+
+  // Spacing scale (4px base)
+  sp4: 4, sp8: 8, sp12: 12, sp16: 16, sp20: 20, sp24: 24, sp32: 32, sp40: 40, sp48: 48, sp64: 64,
+
+  // Border radii
+  radiusSm: 8,
+  radiusMd: 12,
+  radiusLg: 16,
+  radiusXl: 20,
+
+  // Shadows (warm-tinted)
+  shadowCard: "0 1px 3px rgba(26,20,18,0.04), 0 4px 12px rgba(26,20,18,0.03)",
+  shadowElevated: "0 2px 8px rgba(26,20,18,0.06), 0 8px 24px rgba(26,20,18,0.04)",
+  shadowAccent: "0 2px 8px rgba(212,96,58,0.25)",
 };
 
 export const slotColors = { slot1: T.coral, slot2: T.gold, slot3: T.mint };

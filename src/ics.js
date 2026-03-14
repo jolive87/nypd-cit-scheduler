@@ -1,8 +1,7 @@
 // ICS calendar export — RFC 5545 compliant .ics generation for Google Calendar
 // Generates VEVENT entries for each CIT training shift (AM/PM) per active training day.
 
-const SLOT_KEYS = ["slot1", "slot2", "slot3"];
-const SHIFTS = ["AM", "PM"];
+import { getDefaultWeekPlan, SLOT_KEYS, SHIFTS } from "./scheduler.js";
 
 const CRLF = "\r\n";
 
@@ -215,19 +214,6 @@ export function generateICS(weeks, weekPlans, schedule, year, month, config) {
   ].join(CRLF);
 
   return cal;
-}
-
-// ---- Default Week Plan Helper ----
-// Maps each slot to its default weekday within the given week.
-
-export function getDefaultWeekPlan(weekDays, config) {
-  const plan = {};
-  for (const slotKey of SLOT_KEYS) {
-    const targetDay = config.defaultDays[slotKey];
-    const match = weekDays.find((d) => d.dayName === targetDay);
-    plan[slotKey] = match ? match.date : null;
-  }
-  return plan;
 }
 
 // ---- Download Helper ----
