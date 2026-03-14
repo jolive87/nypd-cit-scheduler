@@ -158,7 +158,36 @@ function SlotBar({ slotKey }) { return <div style={{ width: "4px", height: "28px
 // ─── MODALS ────────────────────────────────────────────────────────────────
 function Overlay({ children, onClose }) {
   const mobile = window.innerWidth < 480;
-  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(26,20,18,0.4)", display: "flex", alignItems: mobile ? "flex-end" : "center", justifyContent: "center", padding: mobile ? "0" : `${T.sp16}px`, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}><div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: mobile ? "100%" : "540px", maxHeight: mobile ? "85vh" : "92vh", overflowY: "auto", borderRadius: mobile ? `${T.radiusXl}px ${T.radiusXl}px 0 0` : `${T.radiusXl}px` }}>{mobile && <div style={{ width: "40px", height: "4px", background: T.textFaint, borderRadius: "2px", margin: `${T.sp12}px auto ${T.sp4}px` }} />}{children}</div></div>;
+  const overlayRef = useRef(null);
+  const previousFocusRef = useRef(null);
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement;
+    const el = overlayRef.current;
+    if (!el) return;
+    const focusFirst = () => {
+      const focusable = el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (focusable.length) focusable[0].focus();
+    };
+    focusFirst();
+
+    const handleKey = (e) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key !== 'Tab') return;
+      const focusable = el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last.focus(); } }
+      else { if (document.activeElement === last) { e.preventDefault(); first.focus(); } }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      if (previousFocusRef.current) previousFocusRef.current.focus();
+    };
+  }, [onClose]);
+
+  return <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(26,20,18,0.4)", display: "flex", alignItems: mobile ? "flex-end" : "center", justifyContent: "center", padding: mobile ? "0" : `${T.sp16}px`, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}><div ref={overlayRef} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{ width: "100%", maxWidth: mobile ? "100%" : "540px", maxHeight: mobile ? "85vh" : "92vh", overflowY: "auto", borderRadius: mobile ? `${T.radiusXl}px ${T.radiusXl}px 0 0` : `${T.radiusXl}px` }}>{mobile && <div style={{ width: "40px", height: "4px", background: T.textFaint, borderRadius: "2px", margin: `${T.sp12}px auto ${T.sp4}px` }} />}{children}</div></div>;
 }
 
 function WelcomeModal({ onClose }) {
@@ -893,6 +922,9 @@ export default function CITScheduler() {
 
   return (
     <div style={{ fontFamily: font, background: T.bg, minHeight: "100vh", paddingBottom: "100px", color: T.text }}>
+      {/* Skip to content — visible on focus for keyboard users */}
+      <a href="#main-content" style={{ position: "absolute", top: "-40px", left: 0, background: T.accent, color: "#fff", padding: `${T.sp8}px ${T.sp16}px`, zIndex: 200, fontSize: `${T.fontBody}px`, fontWeight: "600", borderRadius: `0 0 ${T.radiusSm}px ${T.radiusSm}px`, transition: "top 150ms" }} onFocus={e => e.target.style.top = "0"} onBlur={e => e.target.style.top = "-40px"}>Skip to content</a>
+
       {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
       {showShare && schedule && <ShareModal weeks={weeks} weekPlans={weekPlans} schedule={schedule} monthName={monthName} year={year} config={config} onClose={() => setShowShare(false)} showToast={showT} />}
       {showSettings && <SettingsPanel config={config} onSave={saveConfig} onClose={() => setShowSettings(false)} showToast={showT} />}
@@ -922,14 +954,14 @@ export default function CITScheduler() {
       </header>
 
       {/* NAV */}
-      <nav role="tablist" style={{ display: "flex", gap: 0, padding: `0 ${T.sp16}px`, overflowX: "auto", borderBottom: "1px solid rgba(26,20,18,0.08)", background: T.bgCard }}>
-        {navItems.map(n => <button key={n.key} role="tab" aria-selected={view === n.key} onClick={() => setView(n.key)} style={{ ...btnBase, padding: `${T.sp12}px ${T.sp16}px`, borderRadius: 0, fontSize: `${T.fontMono}px`, fontWeight: view === n.key ? "600" : "500", whiteSpace: "nowrap", background: "transparent", color: view === n.key ? T.accent : T.textMuted, borderBottom: `2px solid ${view === n.key ? T.accent : 'transparent'}`, minHeight: "44px" }}>{n.icon} {n.label}</button>)}
+      <nav role="tablist" aria-label="Main navigation" style={{ display: "flex", gap: 0, padding: `0 ${T.sp16}px`, overflowX: "auto", borderBottom: "1px solid rgba(26,20,18,0.08)", background: T.bgCard }}>
+        {navItems.map(n => <button key={n.key} id={`tab-${n.key}`} role="tab" aria-selected={view === n.key} aria-controls={`panel-${n.key}`} tabIndex={view === n.key ? 0 : -1} onClick={() => setView(n.key)} style={{ ...btnBase, padding: `${T.sp12}px ${T.sp16}px`, borderRadius: 0, fontSize: `${T.fontMono}px`, fontWeight: view === n.key ? "600" : "500", whiteSpace: "nowrap", background: "transparent", color: view === n.key ? T.accent : T.textMuted, borderBottom: `2px solid ${view === n.key ? T.accent : 'transparent'}`, minHeight: "44px" }}>{n.icon} {n.label}</button>)}
       </nav>
 
-      <main style={{ padding: bp.isMobile ? `${T.sp16}px` : `${T.sp24}px`, maxWidth: bp.isDesktop ? "720px" : bp.isTablet ? "640px" : "100%", margin: "0 auto" }}>
+      <main id="main-content" style={{ padding: bp.isMobile ? `${T.sp16}px` : `${T.sp24}px`, maxWidth: bp.isDesktop ? "720px" : bp.isTablet ? "640px" : "100%", margin: "0 auto" }}>
 
         {/* ═══ PLAN TAB ═══ */}
-        {view === "plan" && <div>
+        {view === "plan" && <div id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
           <SectionHead icon="🗓" title="Week Planner" sub="Set which days training runs each week. Shift, cancel, or reschedule." />
           <Card style={{ marginBottom: "16px", padding: "14px", border: `1px solid ${T.accent}20`, background: T.accentSoft }}>
             <p style={{ fontSize: "13px", color: T.accent, margin: 0, lineHeight: 1.5, fontWeight: "500" }}>
@@ -944,7 +976,7 @@ export default function CITScheduler() {
         </div>}
 
         {/* ═══ AVAILABILITY TAB ═══ */}
-        {view === "availability" && <div>
+        {view === "availability" && <div id="panel-availability" role="tabpanel" aria-labelledby="tab-availability">
           <SectionHead icon="📋" title="Actor Availability" sub="Tap names to cycle: Both shifts → AM only → PM only → Off" right={<div style={{ display: "flex", gap: "6px" }}><Btn variant="small" onClick={() => setShowPasteMsg(true)} style={{ fontSize: "11px" }}>📩 Paste Message</Btn><Btn variant="small" onClick={copyFromLastMonth} style={{ fontSize: "11px" }}>📋 Copy Last Month</Btn></div>} />
 
           {/* ── Active Actors Toggle ── */}
@@ -1035,9 +1067,12 @@ export default function CITScheduler() {
                       const norm = normalizeAvail(availability[ds]?.[actor]);
                       const isAvail = !!norm;
                       const isActorActive = !!activeActors[actor];
-                      const badge = norm === "am" ? " ☀️" : norm === "pm" ? " 🌙" : "";
                       const chipColor = norm === "am" ? T.sunGold : norm === "pm" ? T.nightIndigo : config.actorColors[actor];
-                      return <Chip key={actor} active={isAvail} dimmed={!approvedSet.has(actor) || !isActorActive} color={chipColor} onClick={() => cycleAvailability(ds, actor)}>{!isActorActive && <span style={{ fontSize: "10px", opacity: 0.6 }}>⊘</span>}{actor}{badge}</Chip>;
+                      const shiftLabel = norm === "am" ? "AM" : norm === "pm" ? "PM" : null;
+                      return <span key={actor} style={{ position: "relative", display: "inline-flex" }}>
+                        <Chip active={isAvail} dimmed={!approvedSet.has(actor) || !isActorActive} color={chipColor} onClick={() => cycleAvailability(ds, actor)}>{!isActorActive && <span style={{ fontSize: "10px", opacity: 0.6 }}>⊘</span>}{actor}</Chip>
+                        {shiftLabel && <span style={{ position: "absolute", top: "-4px", right: "-2px", background: chipColor, color: "#fff", fontSize: "9px", fontWeight: "700", padding: "2px 6px", borderRadius: "6px", textTransform: "uppercase", letterSpacing: "0.05em", lineHeight: 1, pointerEvents: "none" }}>{shiftLabel}</span>}
+                      </span>;
                     })}
                   </div>
                   <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
@@ -1056,7 +1091,7 @@ export default function CITScheduler() {
         </div>}
 
         {/* ═══ SCHEDULE TAB ═══ */}
-        {view === "schedule" && <div>
+        {view === "schedule" && <div id="panel-schedule" role="tabpanel" aria-labelledby="tab-schedule">
           {!schedule ? <Card style={{ textAlign: "center", padding: "48px 20px" }}><div style={{ fontSize: "44px", marginBottom: "10px" }}>📅</div><h3 style={{ fontSize: "17px", fontWeight: "800", color: T.text, margin: "0 0 8px" }}>No schedule yet</h3><p style={{ fontSize: "14px", color: T.textMuted, margin: "0 0 16px" }}>Set your plan and availability first.</p><Btn onClick={() => setView("plan")}>🗓 Go to Plan →</Btn></Card> : <>
             {errors.length > 0 && <Card style={{ marginBottom: "14px", border: `1px solid ${T.red}30`, background: T.redSoft }}>
               <p style={{ fontWeight: "700", fontSize: "13px", color: T.red, margin: "0 0 8px" }}>⚠️ {errors.length} unfilled slot{errors.length > 1 ? "s" : ""}</p>
@@ -1114,7 +1149,7 @@ export default function CITScheduler() {
         </div>}
 
         {/* ═══ DASHBOARD TAB ═══ */}
-        {view === "dashboard" && <div>
+        {view === "dashboard" && <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
           <SectionHead icon="📊" title="Actor Stats" sub="Shift counts and workload distribution" />
           {!schedule && <Card style={{ marginBottom: "14px", textAlign: "center", padding: "24px 20px", border: `1px solid ${T.amber}25`, background: `${T.amber}08` }}><p style={{ fontSize: "14px", color: T.amber, fontWeight: "600", margin: "0 0 4px" }}>No schedule generated yet</p><p style={{ fontSize: "13px", color: T.textMuted, margin: 0 }}>Generate a schedule to see shift counts and workload balance.</p></Card>}
           {fairnessReport && schedule && (() => { const fr = fairnessReport; const fc = fr.overallFairness >= 85 ? T.green : fr.overallFairness >= 70 ? T.amber : T.coral; return <Card style={{ marginBottom: "14px", textAlign: "center", padding: "20px", border: `1px solid ${fc}25`, background: `${fc}08` }}>
@@ -1133,7 +1168,7 @@ export default function CITScheduler() {
         </div>}
 
         {/* ═══ REFERENCE TAB ═══ */}
-        {view === "reference" && <div>
+        {view === "reference" && <div id="panel-reference" role="tabpanel" aria-labelledby="tab-reference">
           <SectionHead icon="📖" title="Quick Guide" />
           <Card style={{ marginBottom: "10px" }}><h3 style={{ fontSize: "15px", fontWeight: "700", margin: "0 0 10px" }}>🗓 Training Slots</h3>{SLOT_KEYS.map(sk => <div key={sk} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}><SlotBar slotKey={sk} /><div><span style={{ fontWeight: "700", fontSize: "13px" }}>{config.slotNames[sk]}</span><span style={{ fontSize: "12px", color: T.textMuted, marginLeft: "8px" }}>Default: {config.defaultDays[sk]}</span><div style={{ fontSize: "11px", color: T.textFaint, marginTop: "1px" }}>{(config.slotScenarios[sk] || []).map(s => `${config.scenarioIcons[s] || ""} ${s}`).join("  ·  ")}</div></div></div>)}</Card>
           <Card style={{ marginBottom: "10px" }}><h3 style={{ fontSize: "15px", fontWeight: "700", margin: "0 0 10px" }}>🎭 Approved Actors</h3>{Object.entries(config.scenarioActors).map(([sc, actors]) => <div key={sc} style={{ marginBottom: "8px" }}><div style={{ fontWeight: "600", fontSize: "13px", marginBottom: "4px" }}>{config.scenarioIcons[sc] || "🎭"} {sc}</div><div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>{actors.map(a => <span key={a} style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "6px", background: `${config.actorColors[a] || T.textSoft}15`, color: config.actorColors[a] || T.textSoft, fontWeight: "500" }}>{a}</span>)}</div></div>)}</Card>
