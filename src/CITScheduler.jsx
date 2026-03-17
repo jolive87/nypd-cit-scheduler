@@ -614,38 +614,74 @@ function PasteMessagePanel({ config, availability, activeDates, onApply, onClose
 
   const parseMessage = () => {
     const result = { shift: null, days: [], excludeDates: [], available: null, perDate: false, dateShifts: {} };
-    // Normalize a.m./p.m. to am/pm
-    const normalized = text.replace(/a\.m\./gi, 'am').replace(/p\.m\./gi, 'pm');
+    // Normalize punctuation and shorthand
+    const normalized = text
+      .replace(/a\.m\./gi, 'am').replace(/p\.m\./gi, 'pm')
+      .replace(/\bn[oo]+ns?\b/gi, 'am')  // "noon" → am (noon shift = AM)
+      .replace(/\b8\s*pm\b/gi, 'pm')     // "8pm", "8 pm" → pm
+      .replace(/\b12\s*pm\b/gi, 'am')    // "12pm" → am (noon shift)
+      .replace(/\bday\s*time\b/gi, 'am') // "daytime" → am
+      .replace(/\bnight\s*time\b/gi, 'pm') // "nighttime" → pm
+      .replace(/\bday\s+shift\b/gi, 'am') // "day shift" → am
+      .replace(/\bnight\s+shift\b/gi, 'pm') // "night shift" → pm
+      .replace(/\bnights?\b/gi, 'pm');   // "night", "nights" → pm
 
-    if (/unavailable|not available|out this month|won't be/i.test(normalized)) {
+    const monthNames = { january:0, jan:0, february:1, feb:1, march:2, mar:2, april:3, apr:3, may:4, june:5, jun:5, july:6, jul:6, august:7, aug:7, september:8, sep:8, sept:8, october:9, oct:9, november:10, nov:10, december:11, dec:11 };
+
+    // ── Unavailability ────────────────────────────────────────────────────
+    if (/unavailable|not available|out this month|won'?t be|can'?t (?:do|make) (?:it |any )?this month|not (?:going to be |gonna be )?available|count me out|i'?m out/i.test(normalized)) {
       result.available = false;
       setPreview(result);
       return;
     }
-    if (/available all month|can do everything|all month/i.test(normalized) && !/\d{1,2}(?:st|nd|rd|th)/i.test(normalized)) {
+
+    // ── Full availability ─────────────────────────────────────────────────
+    // "available all month", "all April", "every day", "any day", "I can do everything",
+    // "available all of March", "free all month", "count me in for everything"
+    const monthRx = Object.keys(monthNames).filter(k => k.length > 2).join('|');
+    const fullAvailRx = new RegExp(
+      `available all month|can do everything|free all month|available every|every day|any day|all month` +
+      `|(?:available |free |open |good )?(?:all|all of|every|the (?:whole|entire|full))\\s+(?:${monthRx})` +
+      `|count me in|i'?m? (?:good|available|free|open) (?:for )?(?:all|every|the (?:whole|entire))`,
+      'i'
+    );
+    if (fullAvailRx.test(normalized) && !/\d{1,2}(?:st|nd|rd|th)/i.test(normalized)) {
       result.available = true;
     }
 
-    // If message has specific date ordinals (3rd, 11th, etc.) → per-date mode
+    // ── Detect "today" and resolve to date ────────────────────────────────
+    const todayMatch = /\btoday\b/i.test(normalized);
+    if (todayMatch && activeDates.length > 0) {
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      if (activeDates.includes(todayStr)) {
+        result.perDate = true;
+        const dayNum = now.getDate();
+        // Check shift in the message
+        const todayShift = /\bpm\b/i.test(normalized) && !/\bam\b/i.test(normalized) ? "pm"
+          : /\bam\b/i.test(normalized) && !/\bpm\b/i.test(normalized) ? "am" : "both";
+        result.dateShifts[dayNum] = todayShift;
+        setPreview(result);
+        return;
+      }
+    }
+
+    // ── Per-date mode (specific date ordinals: 3rd, 11th, etc.) ───────────
     const hasSpecificDates = /\d{1,2}(?:st|nd|rd|th)/i.test(normalized);
 
     if (hasSpecificDates) {
       result.perDate = true;
       const curMonth = activeDates.length > 0 ? parseInt(activeDates[0].split('-')[1]) - 1 : new Date().getMonth();
-      const monthNames = { january:0, february:1, march:2, april:3, may:4, june:5, july:6, august:7, september:8, october:9, november:10, december:11 };
 
-      // Split into clauses by period, semicolon, or dash
       const sentences = normalized.split(/[.;]|—|--/).map(s => s.trim()).filter(Boolean);
       let currentShift = "both";
 
       for (const sentence of sentences) {
-        // Detect shift declaration in this sentence
-        if (/\bam\s+and\s+pm\b|\bpm\s+and\s+am\b|\bboth\s+shifts?\b/i.test(sentence)) currentShift = "both";
-        else if (/\bpm\s+only\b|\bonly\s+pm\b|\bevenings?\s+only\b|\bonly\s+evenings?\b/i.test(sentence)) currentShift = "pm";
-        else if (/\bam\s+only\b|\bonly\s+am\b|\bmornings?\s+only\b|\bonly\s+mornings?\b/i.test(sentence)) currentShift = "am";
-        // If no shift keyword in this sentence, currentShift carries over
+        // Detect shift in this clause
+        if (/\bam\s+and\s+pm\b|\bpm\s+and\s+am\b|\bboth\s+shifts?\b|\bboth\b/i.test(sentence)) currentShift = "both";
+        else if (/\bpm\b/i.test(sentence) && !/\bam\b/i.test(sentence)) currentShift = "pm";
+        else if (/\bam\b/i.test(sentence) && !/\bpm\b/i.test(sentence)) currentShift = "am";
 
-        // Extract dates with month awareness (skip dates belonging to other months)
         const tokens = sentence.split(/[\s,]+/);
         let activeMonth = curMonth;
         for (const token of tokens) {
@@ -658,18 +694,60 @@ function PasteMessagePanel({ config, availability, activeDates, onApply, onClose
         }
       }
     } else {
-      // Simple mode — day-of-week + single shift for all dates
-      if (/no pm|not pm|not evenings?|can'?t do (?:the )?pm|can'?t do (?:the )?evenings?/i.test(normalized)) result.shift = "am";
-      else if (/no am|not am|not mornings?|can'?t do (?:the )?am|can'?t do (?:the )?mornings?|can'?t do (?:the )?noon/i.test(normalized)) result.shift = "pm";
-      else if (/am only|only am|mornings? only|only mornings?|noon only|only noon|morning shift|just (?:the )?mornings?/i.test(normalized)) result.shift = "am";
-      else if (/pm only|only pm|evenings? only|only evenings?|8 ?pm only|only 8 ?pm|evening shift|just (?:the )?evenings?/i.test(normalized)) result.shift = "pm";
-      else if (/(?:^|\W)mornings?(?:\W|$)/i.test(normalized) && !/pm|evening/i.test(normalized)) result.shift = "am";
-      else if (/(?:^|\W)evenings?(?:\W|$)/i.test(normalized) && !/am|morning|noon/i.test(normalized)) result.shift = "pm";
-      const dayPatterns = [{ rx: /mondays?/i, day: "Monday" }, { rx: /tuesdays?/i, day: "Tuesday" }, { rx: /wednesdays?/i, day: "Wednesday" }, { rx: /thursdays?/i, day: "Thursday" }, { rx: /fridays?/i, day: "Friday" }];
+      // ── Simple mode — day-of-week + single shift ──────────────────────
+      // Shift detection: broadened to handle natural phrasing
+      // Negation patterns (exclusion of one shift = the other)
+      if (/no pm|not? pm|can'?t do (?:the )?pm|can'?t do (?:the )?evenings?|no evenings?|not evenings?/i.test(normalized)) result.shift = "am";
+      else if (/no am|not? am|can'?t do (?:the )?am|can'?t do (?:the )?mornings?|no mornings?|not mornings?|can'?t do (?:the )?noon/i.test(normalized)) result.shift = "pm";
+      // Explicit shift preference
+      else if (/am\s+only|only\s+am|mornings?\s+only|only\s+mornings?|noon\s+only|only\s+noon|morning\s+shift|just\s+(?:the\s+)?mornings?|just\s+am/i.test(normalized)) result.shift = "am";
+      else if (/pm\s+only|only\s+pm|evenings?\s+only|only\s+evenings?|evening\s+shift|just\s+(?:the\s+)?evenings?|just\s+pm/i.test(normalized)) result.shift = "pm";
+      // Bare "am" or "pm" without the other mentioned (handles "available all April am")
+      else if (/\bam\b/i.test(normalized) && !/\bpm\b/i.test(normalized)) result.shift = "am";
+      else if (/\bpm\b/i.test(normalized) && !/\bam\b/i.test(normalized)) result.shift = "pm";
+      // Standalone "mornings" or "evenings" without the other
+      else if (/\bmornings?\b/i.test(normalized) && !/\bpm\b|\bevenings?\b/i.test(normalized)) result.shift = "am";
+      else if (/\bevenings?\b/i.test(normalized) && !/\bam\b|\bmornings?\b/i.test(normalized)) result.shift = "pm";
+      // Both explicitly stated
+      else if (/\bam\b.*\bpm\b|\bpm\b.*\bam\b|\bboth shifts?\b/i.test(normalized)) result.shift = null; // null = both
+
+      // Day-of-week detection (handles abbreviations and ranges)
+      const dayPatterns = [
+        { rx: /\bmon(?:days?)?\b/i, day: "Monday" },
+        { rx: /\btue(?:s(?:days?)?)?\b/i, day: "Tuesday" },
+        { rx: /\bwed(?:s|nesdays?)?\b/i, day: "Wednesday" },
+        { rx: /\bthu(?:rs(?:days?)?)?\b/i, day: "Thursday" },
+        { rx: /\bfri(?:days?)?\b/i, day: "Friday" },
+      ];
       result.days = dayPatterns.filter(d => d.rx.test(normalized)).map(d => d.day);
-      (normalized.match(/except (?:the )?(\d+)(?:st|nd|rd|th)?/gi) || []).forEach(m => {
+
+      // Day ranges: "Monday through Wednesday", "Tues thru Thurs"
+      const rangeMatch = normalized.match(/\b(mon(?:days?)?|tue(?:s(?:days?)?)?|wed(?:s|nesdays?)?|thu(?:rs(?:days?)?)?|fri(?:days?)?)\s*(?:through|thru|to|-)\s*(mon(?:days?)?|tue(?:s(?:days?)?)?|wed(?:s|nesdays?)?|thu(?:rs(?:days?)?)?|fri(?:days?)?)\b/i);
+      if (rangeMatch) {
+        const order = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+        const startDay = dayPatterns.find(d => d.rx.test(rangeMatch[1]))?.day;
+        const endDay = dayPatterns.find(d => d.rx.test(rangeMatch[2]))?.day;
+        if (startDay && endDay) {
+          const si = order.indexOf(startDay), ei = order.indexOf(endDay);
+          if (si >= 0 && ei >= 0 && si <= ei) {
+            result.days = order.slice(si, ei + 1);
+          }
+        }
+      }
+
+      // Exclude dates: "except the 15th", "not the 3rd", "excluding March 20"
+      (normalized.match(/(?:except|not|excluding|skip|but not)(?: the)? ?(\d+)(?:st|nd|rd|th)?/gi) || []).forEach(m => {
         const n = m.match(/\d+/); if (n) result.excludeDates.push(parseInt(n[0]));
       });
+
+      // Date exclusion ranges: "except the 15th-17th", "not the 3rd through 5th"
+      const exclRange = normalized.match(/(?:except|not|excluding)(?: the)? ?(\d+)(?:st|nd|rd|th)?\s*(?:through|thru|to|-)\s*(?:the )?(\d+)(?:st|nd|rd|th)?/i);
+      if (exclRange) {
+        const start = parseInt(exclRange[1]), end = parseInt(exclRange[2]);
+        for (let d = start; d <= end; d++) {
+          if (!result.excludeDates.includes(d)) result.excludeDates.push(d);
+        }
+      }
     }
     setPreview(result);
   };

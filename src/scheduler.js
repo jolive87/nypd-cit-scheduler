@@ -106,6 +106,14 @@ const MIN_MONTHLY_SCENARIOS = 7;
 export function generateSchedule(weeks, weekPlans, availability, config) {
   const { scenarioActors, slotScenarios, conflicts } = config;
 
+  // ── Actor constraints (day-of-week restrictions) ──────────────────────────
+  const actorConstraints = config.actorConstraints || {};
+  const DAYS_LOOKUP = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  function getDayName(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return DAYS_LOOKUP[new Date(y, m - 1, d).getDay()];
+  }
+
   // ── Pre-compute eligible count for fairness tie-breaking ──────────────────
   const eligibleCount = {};
   for (const actor of config.actors) eligibleCount[actor] = 0;
@@ -117,10 +125,14 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
       const edate = ewp[esk];
       if (!edate) continue;
       const eda = availability[edate] || {};
+      const edayName = getDayName(edate);
       for (const eshift of SHIFTS) {
         for (const escenario of slotScenarios[esk] || []) {
           for (const actor of scenarioActors[escenario] || []) {
             if (!isAvailableForShift(eda[actor], eshift)) continue;
+            // Day-of-week constraint
+            const c = actorConstraints[actor];
+            if (c?.allowedDays && !c.allowedDays.includes(edayName)) continue;
             eligibleCount[actor]++;
           }
         }
@@ -152,6 +164,7 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
   // ── Pre-compute fairness metrics ──────────────────────────────────────────
   const activeActors = config.actors.filter(a => eligibleCount[a] > 0);
   const fairTarget = activeActors.length > 0 ? allSlots.length / activeActors.length : 0;
+  const maxPerActor = Math.ceil(fairTarget) + 1; // hard cap — no actor gets way more than average
 
   // ── State management ───────────────────────────────────────────────────────
   function freshState() {
@@ -213,7 +226,13 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     const dayAvail = availability[date] || {};
     const d = state.da[date] || { AM: {}, PM: {} };  // per-day tracking
     const w = state.wa[weekKey] || { AM: {}, PM: {} }; // per-week tracking (for conflicts)
+    const dayName = getDayName(date);
     return approved.filter(actor => {
+      // Hard cap: no actor exceeds maxPerActor assignments
+      if (state.usageCount[actor] >= maxPerActor) return false;
+      // Day-of-week constraint (e.g., Chris = Thursday only)
+      const constraint = actorConstraints[actor];
+      if (constraint?.allowedDays && !constraint.allowedDays.includes(dayName)) return false;
       // overrideShift: treat AM-only or PM-only availability as "both" (for min-7 enforcement)
       if (overrideShift) {
         if (!normalizeAvail(dayAvail[actor])) return false; // completely unavailable → still blocked
@@ -228,7 +247,7 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     });
   }
 
-  // Diversity-aware ranking: spreads scenarios across actors to reduce emotional toll
+  // Diversity-aware ranking: balances workload AND spreads scenarios for emotional well-being
   function rankCandidates(candidates, shift, state, scenario) {
     return [...candidates].sort((a, b) => {
       // 1. Below minimum threshold gets priority
@@ -239,17 +258,16 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
       const aScen = state.scenarioUsage[a]?.[scenario] || 0;
       const bScen = state.scenarioUsage[b]?.[scenario] || 0;
       if (aScen !== bScen) return aScen - bScen;
-      // 3. Concentration: actor stuck on fewer scenarios needs variety more
-      //    Higher max repetition = more stuck = gets priority for a fresh scenario
+      // 3. Fewer current assignments → first (BALANCE — prevents 11 vs 7 imbalance)
+      const usageDiff = state.usageCount[a] - state.usageCount[b];
+      if (usageDiff !== 0) return usageDiff;
+      // 4. Concentration: actor stuck on fewer scenarios needs variety more
       const aVals = Object.values(state.scenarioUsage[a] || {});
       const bVals = Object.values(state.scenarioUsage[b] || {});
       const aMax = aVals.length > 0 ? Math.max(...aVals) : 0;
       const bMax = bVals.length > 0 ? Math.max(...bVals) : 0;
       if (aMax !== bMax) return bMax - aMax; // higher concentration → goes first
-      // 4. Fewer current assignments → first (balance)
-      const usageDiff = state.usageCount[a] - state.usageCount[b];
-      if (usageDiff !== 0) return usageDiff;
-      // 5. Fewer eligible slots → first (structural fairness — least important)
+      // 5. Fewer eligible slots → first (structural fairness)
       const oppDiff = eligibleCount[a] - eligibleCount[b];
       if (oppDiff !== 0) return oppDiff;
       // 6. Stable tie-break
