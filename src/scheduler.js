@@ -170,6 +170,7 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
       da: {},  // da[date][shift][actor] = true — day-level, for "already used in shift" check
       usageCount: Object.fromEntries(config.actors.map(a => [a, 0])),
       pmCount: Object.fromEntries(config.actors.map(a => [a, 0])),
+      scenarioUsage: Object.fromEntries(config.actors.map(a => [a, {}])), // actor → { scenario: count }
       backtrackCount: 0,
     };
   }
@@ -187,6 +188,7 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     state.da[date][shift][actor] = true;
     state.usageCount[actor]++;
     if (shift === 'PM') state.pmCount[actor]++;
+    state.scenarioUsage[actor][scenario] = (state.scenarioUsage[actor][scenario] || 0) + 1;
   }
 
   function undoAssign(state, slot, actor) {
@@ -200,6 +202,7 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     if (state.da[date]) delete state.da[date][shift][actor];
     state.usageCount[actor]--;
     if (shift === 'PM') state.pmCount[actor]--;
+    state.scenarioUsage[actor][scenario]--;
   }
 
   // ── Candidate filter ────────────────────────────────────────────────────────
@@ -226,16 +229,20 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
   }
 
   // MFV (Most Fair Value) ordering: actors with fewer opportunities go first
-  function rankCandidates(candidates, shift, state) {
+  function rankCandidates(candidates, shift, state, scenario) {
     return [...candidates].sort((a, b) => {
       // Primary: actors below minimum threshold get priority
       const aBelow = state.usageCount[a] < MIN_MONTHLY_SCENARIOS ? 1 : 0;
       const bBelow = state.usageCount[b] < MIN_MONTHLY_SCENARIOS ? 1 : 0;
       if (aBelow !== bBelow) return bBelow - aBelow; // below-min goes first
-      // Secondary: fewer total opportunities across the month → goes first (FAIRNESS)
+      // Scenario rotation: fewer times playing THIS scenario → goes first
+      const aScen = state.scenarioUsage[a]?.[scenario] || 0;
+      const bScen = state.scenarioUsage[b]?.[scenario] || 0;
+      if (aScen !== bScen) return aScen - bScen;
+      // Fewer total opportunities across the month → goes first (FAIRNESS)
       const oppDiff = eligibleCount[a] - eligibleCount[b];
       if (oppDiff !== 0) return oppDiff;
-      // Tertiary: fewer current assignments → goes first (BALANCE)
+      // Fewer current assignments → goes first (BALANCE)
       const usageDiff = state.usageCount[a] - state.usageCount[b];
       if (usageDiff !== 0) return usageDiff;
       // Stable tie-break
@@ -263,7 +270,7 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     [slots[idx], slots[mrvIdx]] = [slots[mrvIdx], slots[idx]];
     const slot = slots[idx];
 
-    const candidates = rankCandidates(getEligible(slot, state, relaxLevel), slot.shift, state);
+    const candidates = rankCandidates(getEligible(slot, state, relaxLevel), slot.shift, state, slot.scenario);
     if (candidates.length === 0) {
       [slots[idx], slots[mrvIdx]] = [slots[mrvIdx], slots[idx]]; // swap back
       return false;
@@ -439,7 +446,7 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
         );
         for (const scenario of scenarioOrder) {
           const slot = { wi, weekKey, slotKey, shift, scenario, date };
-          const candidates = rankCandidates(getEligible(slot, fbState, 0), shift, fbState);
+          const candidates = rankCandidates(getEligible(slot, fbState, 0), shift, fbState, scenario);
           if (candidates.length === 0) {
             const approved = scenarioActors[scenario] || [];
             const eliminations = approved.flatMap(actor => {
