@@ -228,24 +228,31 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     });
   }
 
-  // MFV (Most Fair Value) ordering: actors with fewer opportunities go first
+  // Diversity-aware ranking: spreads scenarios across actors to reduce emotional toll
   function rankCandidates(candidates, shift, state, scenario) {
     return [...candidates].sort((a, b) => {
-      // Primary: actors below minimum threshold get priority
+      // 1. Below minimum threshold gets priority
       const aBelow = state.usageCount[a] < MIN_MONTHLY_SCENARIOS ? 1 : 0;
       const bBelow = state.usageCount[b] < MIN_MONTHLY_SCENARIOS ? 1 : 0;
-      if (aBelow !== bBelow) return bBelow - aBelow; // below-min goes first
-      // Scenario rotation: fewer times playing THIS scenario → goes first
+      if (aBelow !== bBelow) return bBelow - aBelow;
+      // 2. Scenario rotation: fewer times playing THIS scenario → first
       const aScen = state.scenarioUsage[a]?.[scenario] || 0;
       const bScen = state.scenarioUsage[b]?.[scenario] || 0;
       if (aScen !== bScen) return aScen - bScen;
-      // Fewer total opportunities across the month → goes first (FAIRNESS)
-      const oppDiff = eligibleCount[a] - eligibleCount[b];
-      if (oppDiff !== 0) return oppDiff;
-      // Fewer current assignments → goes first (BALANCE)
+      // 3. Concentration: actor stuck on fewer scenarios needs variety more
+      //    Higher max repetition = more stuck = gets priority for a fresh scenario
+      const aVals = Object.values(state.scenarioUsage[a] || {});
+      const bVals = Object.values(state.scenarioUsage[b] || {});
+      const aMax = aVals.length > 0 ? Math.max(...aVals) : 0;
+      const bMax = bVals.length > 0 ? Math.max(...bVals) : 0;
+      if (aMax !== bMax) return bMax - aMax; // higher concentration → goes first
+      // 4. Fewer current assignments → first (balance)
       const usageDiff = state.usageCount[a] - state.usageCount[b];
       if (usageDiff !== 0) return usageDiff;
-      // Stable tie-break
+      // 5. Fewer eligible slots → first (structural fairness — least important)
+      const oppDiff = eligibleCount[a] - eligibleCount[b];
+      if (oppDiff !== 0) return oppDiff;
+      // 6. Stable tie-break
       return a.localeCompare(b);
     });
   }
@@ -344,9 +351,9 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     return report;
   }
 
-  // ── Post-optimization: swap to improve fairness ─────────────────────────
+  // ── Post-optimization: fairness + scenario diversity ────────────────────
   function optimizeFairness(state, relaxLevel) {
-    // Pass 1: standard fairness swaps (respect availability)
+    // Pass 1: fairness swaps with diversity guard
     for (let iter = 0; iter < 200; iter++) {
       let swapped = false;
       const sorted = [...config.actors].sort((a, b) => state.usageCount[a] - state.usageCount[b]);
@@ -355,8 +362,16 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
         for (const slot of allSlots) {
           const cur = state.schedule[slot.weekKey]?.[slot.slotKey]?.[slot.shift]?.[slot.scenario];
           if (!cur || state.usageCount[cur] <= state.usageCount[underActor] + 1) continue;
+          const curScenBefore = state.scenarioUsage[cur]?.[slot.scenario] || 0;
           undoAssign(state, slot, cur);
           if (getEligible(slot, state, relaxLevel).includes(underActor)) {
+            // Diversity guard: don't swap if it would concentrate underActor on this scenario
+            // more than cur already was
+            const underScenAfter = (state.scenarioUsage[underActor]?.[slot.scenario] || 0) + 1;
+            if (underScenAfter > curScenBefore) {
+              applyAssign(state, slot, cur);
+              continue;
+            }
             applyAssign(state, slot, underActor);
             swapped = true;
             break;
@@ -369,8 +384,6 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
     }
 
     // Pass 2: min-7 enforcement — override AM/PM preference for under-minimum actors
-    // If an actor has fewer than MIN_MONTHLY_SCENARIOS, allow them into the opposite
-    // shift (e.g., PM when they only requested AM) to reach the minimum.
     for (let iter = 0; iter < 100; iter++) {
       let swapped = false;
       const belowMin = config.actors
@@ -384,13 +397,68 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
           const cur = state.schedule[slot.weekKey]?.[slot.slotKey]?.[slot.shift]?.[slot.scenario];
           if (!cur || state.usageCount[cur] <= state.usageCount[underActor] + 1) continue;
           undoAssign(state, slot, cur);
-          // Use overrideShift=true: treats AM-only or PM-only availability as "both"
           if (getEligible(slot, state, relaxLevel, true).includes(underActor)) {
             applyAssign(state, slot, underActor);
             swapped = true;
             break;
           }
           applyAssign(state, slot, cur);
+        }
+        if (swapped) break;
+      }
+      if (!swapped) break;
+    }
+
+    // Pass 3: scenario diversity — two-way swaps to break concentration
+    // If actor A is stuck playing the same scenario repeatedly, find actor B on a
+    // different scenario where A and B can trade. Both keep their total count but
+    // gain variety. This matters because these are emotionally heavy roles.
+    for (let iter = 0; iter < 300; iter++) {
+      let swapped = false;
+
+      // Find the actor with highest scenario concentration
+      let worstActor = null, worstScenario = null, worstCount = 1;
+      for (const actor of config.actors) {
+        for (const [sc, c] of Object.entries(state.scenarioUsage[actor] || {})) {
+          if (c > worstCount || (c === worstCount && (!worstActor || actor < worstActor))) {
+            worstCount = c; worstActor = actor; worstScenario = sc;
+          }
+        }
+      }
+      if (!worstActor) break; // all concentrations <= 1, nothing to improve
+
+      // Find a slot where worstActor plays their over-concentrated scenario
+      for (const slotA of allSlots) {
+        if (slotA.scenario !== worstScenario) continue;
+        if (state.schedule[slotA.weekKey]?.[slotA.slotKey]?.[slotA.shift]?.[slotA.scenario] !== worstActor) continue;
+
+        // Look for a two-way swap with another actor on a different scenario
+        for (const slotB of allSlots) {
+          if (slotB.scenario === worstScenario) continue;
+          const actorB = state.schedule[slotB.weekKey]?.[slotB.slotKey]?.[slotB.shift]?.[slotB.scenario];
+          if (!actorB || actorB === worstActor) continue;
+
+          // Don't just shift the concentration problem to actorB
+          const bCountOfWorst = state.scenarioUsage[actorB]?.[worstScenario] || 0;
+          if (bCountOfWorst >= worstCount - 1) continue;
+
+          // Try the swap: A takes B's scenario, B takes A's scenario
+          undoAssign(state, slotA, worstActor);
+          undoAssign(state, slotB, actorB);
+
+          const aCanDoB = getEligible(slotB, state, relaxLevel).includes(worstActor);
+          const bCanDoA = getEligible(slotA, state, relaxLevel).includes(actorB);
+
+          if (aCanDoB && bCanDoA) {
+            applyAssign(state, slotA, actorB);
+            applyAssign(state, slotB, worstActor);
+            swapped = true;
+            break;
+          }
+
+          // Restore if swap wasn't possible
+          applyAssign(state, slotA, worstActor);
+          applyAssign(state, slotB, actorB);
         }
         if (swapped) break;
       }
