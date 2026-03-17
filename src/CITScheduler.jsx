@@ -830,6 +830,7 @@ export default function CITScheduler() {
   const [showPasteMsg, setShowPasteMsg] = useState(false);
   const [fairnessReport, setFairnessReport] = useState(null);
   const [availView, setAvailView] = useState("compact");
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   const weeks = getWeeksInMonth(year, month);
   const monthName = new Date(year, month).toLocaleString('default', { month: 'long' });
@@ -882,6 +883,12 @@ export default function CITScheduler() {
       setLoading(false);
     })()
   }, [sKey]);
+
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 400);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const save = useCallback(async (a, wp, s, e, o, fr, aa) => {
     try { await storage.set(sKey, JSON.stringify({ availability: a, weekPlans: wp, schedule: s, errors: e, overrides: o, fairnessReport: fr || null, activeActors: aa || {} })) }
@@ -1100,7 +1107,7 @@ export default function CITScheduler() {
 
         {/* ═══ AVAILABILITY TAB ═══ */}
         {view === "availability" && <div id="panel-availability" role="tabpanel" aria-labelledby="tab-availability">
-          <SectionHead icon="📋" title="Actor Availability" sub="Tap names to cycle: Both shifts → AM only → PM only → Off" right={<div style={{ display: "flex", gap: "6px" }}><Btn variant="small" onClick={() => setShowPasteMsg(true)} style={{ fontSize: "11px" }}>📩 Paste Message</Btn><Btn variant="small" onClick={copyFromLastMonth} style={{ fontSize: "11px" }}>📋 Copy Last Month</Btn></div>} />
+          <SectionHead icon="📋" title="Actor Availability" sub="Tap names to cycle: Both shifts → AM only → PM only → Off" right={<div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}><Btn variant="small" onClick={() => setShowPasteMsg(true)} style={{ fontSize: "11px" }}>📩 Paste Message</Btn><Btn variant="small" onClick={copyFromLastMonth} style={{ fontSize: "11px" }}>📋 Copy Last Month</Btn><Btn variant="small" onClick={() => { const cleared = {}; activeDates.forEach(ds => { cleared[ds] = {} }); setAvailability(cleared); save(cleared, weekPlans, schedule, errors, overrides, fairnessReport, activeActors); showT("All availability cleared", "success"); }} style={{ fontSize: "11px" }}>✕ Clear All</Btn></div>} />
 
           {/* ── Active Actors Toggle ── */}
           <Card style={{ marginBottom: "16px", padding: "16px" }} accent={T.accent}>
@@ -1317,6 +1324,9 @@ export default function CITScheduler() {
           body{overflow-x:hidden}
         }
       `}</style>
+
+      {/* Back to top floating button */}
+      {showScrollTop && <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Back to top" style={{ position: "fixed", bottom: "24px", right: "24px", zIndex: 150, width: "48px", height: "48px", borderRadius: "50%", border: "none", background: T.accent, color: "#fff", fontSize: "20px", fontWeight: "700", cursor: "pointer", boxShadow: T.shadowElevated, display: "flex", alignItems: "center", justifyContent: "center", animation: `fadeSlideIn ${T.dNormal} ${T.easeExpressive}` }}>↑</button>}
     </div>
   );
 }

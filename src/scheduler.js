@@ -164,7 +164,7 @@ export function generateSchedule(weeks, weekPlans, availability, config) {
   // ── Pre-compute fairness metrics ──────────────────────────────────────────
   const activeActors = config.actors.filter(a => eligibleCount[a] > 0);
   const fairTarget = activeActors.length > 0 ? allSlots.length / activeActors.length : 0;
-  const maxPerActor = Math.ceil(fairTarget) + 1; // hard cap — no actor gets way more than average
+  const maxPerActor = Math.ceil(fairTarget); // hard cap — no actor exceeds 1 above average
 
   // ── State management ───────────────────────────────────────────────────────
   function freshState() {
