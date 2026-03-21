@@ -25,3 +25,9 @@ dist-ssr
 
 # Planning files
 .planning/
+
+# Environment variables
+.env
+.env.local
+
+.vercel

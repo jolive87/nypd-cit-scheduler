@@ -1,12 +1,116 @@
-// Storage adapter — maps the window.storage API (from Claude.ai artifacts) to localStorage
-// Provides the same async interface so the component code needs minimal changes.
+// Storage adapter — dual-write to localStorage (fast cache) + Supabase (cloud backup)
+// localStorage is always the primary read source. Supabase syncs in background.
+// App works fully offline if Supabase is unreachable.
+
+import { supabase } from './supabase.js';
+
+// --- Supabase helpers (fire-and-forget, never block the UI) ---
+
+function supabaseSet(key, value) {
+  if (!supabase) return;
+  supabase
+    .from('cit_storage')
+    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    .then(({ error }) => {
+      if (error) console.warn('Supabase write failed:', key, error.message);
+    });
+}
+
+function supabaseDelete(key) {
+  if (!supabase) return;
+  supabase
+    .from('cit_storage')
+    .delete()
+    .eq('key', key)
+    .then(({ error }) => {
+      if (error) console.warn('Supabase delete failed:', key, error.message);
+    });
+}
+
+async function supabaseGet(key) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('cit_storage')
+      .select('value')
+      .eq('key', key)
+      .single();
+    if (error || !data) return null;
+    return data.value;
+  } catch {
+    return null;
+  }
+}
+
+async function supabaseList(prefix) {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('cit_storage')
+      .select('key')
+      .like('key', `${prefix}%`);
+    if (error || !data) return [];
+    return data.map((row) => row.key);
+  } catch {
+    return [];
+  }
+}
+
+// --- Device migration: restore from Supabase if localStorage is empty ---
+
+let migrationDone = false;
+
+async function migrateFromSupabase() {
+  if (migrationDone || !supabase) return;
+  migrationDone = true;
+
+  // Check if localStorage already has CIT data
+  let hasLocalData = false;
+  for (let i = 0; i < localStorage.length; i++) {
+    if (localStorage.key(i)?.startsWith('cit-v4-')) {
+      hasLocalData = true;
+      break;
+    }
+  }
+  if (hasLocalData) return;
+
+  // localStorage is empty — try restoring from Supabase
+  try {
+    const { data, error } = await supabase
+      .from('cit_storage')
+      .select('key, value')
+      .like('key', 'cit-v4-%');
+    if (error || !data || data.length === 0) return;
+
+    for (const row of data) {
+      localStorage.setItem(row.key, row.value);
+    }
+    console.log(`Restored ${data.length} items from Supabase`);
+    // Reload so the app picks up the restored data
+    window.location.reload();
+  } catch (e) {
+    console.warn('Supabase migration failed:', e.message);
+  }
+}
+
+// Kick off migration immediately on module load
+migrateFromSupabase();
+
+// --- Storage adapter (same API as before) ---
 
 const storage = {
   async get(key) {
     try {
       const value = localStorage.getItem(key);
-      if (value === null) return null;
-      return { value };
+      if (value !== null) return { value };
+
+      // localStorage miss — try Supabase
+      const remote = await supabaseGet(key);
+      if (remote !== null) {
+        localStorage.setItem(key, remote);
+        return { value: remote };
+      }
+      return null;
     } catch {
       return null;
     }
@@ -18,6 +122,7 @@ const storage = {
     } catch (e) {
       console.error('Storage write failed:', e);
     }
+    supabaseSet(key, value);
   },
 
   async delete(key) {
@@ -26,6 +131,7 @@ const storage = {
     } catch (e) {
       console.error('Storage delete failed:', e);
     }
+    supabaseDelete(key);
   },
 
   async list(prefix) {
@@ -47,15 +153,12 @@ const storage = {
 export async function exportBackup() {
   const data = {};
   try {
-    // Export config
     const config = localStorage.getItem('cit-v4-config');
     if (config) data['cit-v4-config'] = config;
 
-    // Export welcome flag
     const welcomed = localStorage.getItem('cit-v4-welcomed');
     if (welcomed) data['cit-v4-welcomed'] = welcomed;
 
-    // Export all monthly data
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith('cit-v4-') && key !== 'cit-v4-config' && key !== 'cit-v4-welcomed') {
@@ -85,7 +188,6 @@ export async function importBackup(file) {
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target.result);
-        // Validate structure — all keys should start with cit-v4
         const keys = Object.keys(data);
         if (keys.length === 0) {
           reject(new Error('Backup file is empty'));
@@ -96,9 +198,9 @@ export async function importBackup(file) {
           reject(new Error('Invalid backup file format'));
           return;
         }
-        // Write all keys to localStorage
         for (const [key, value] of Object.entries(data)) {
           localStorage.setItem(key, value);
+          supabaseSet(key, value);
         }
         resolve(keys.length);
       } catch (err) {
