@@ -17,6 +17,8 @@ if (typeof document !== "undefined" && !document.getElementById(KEYFRAMES_ID)) {
 @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes chipPop { 0% { transform: scale(0.92); } 50% { transform: scale(1.04); } 100% { transform: scale(1); } }
+@keyframes dotPop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.4); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes pulseReady { 0%, 100% { box-shadow: 0 2px 8px rgba(212,96,58,0.25); } 50% { box-shadow: 0 4px 20px rgba(212,96,58,0.4), 0 0 0 4px rgba(212,96,58,0.08); } }
 @keyframes cardStagger { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 `;
@@ -126,7 +128,7 @@ async function copyToClipboard(text) {
 // ─── UI BUILDING BLOCKS ────────────────────────────────────────────────────
 const btnBase = { fontFamily: font, border: "none", cursor: "pointer", transition: `all ${T.dFast} ${T.easeProductive}`, letterSpacing: "0.01em" };
 
-function Btn({ children, variant = "primary", onClick, style, disabled, "aria-label": ariaLabel }) {
+function Btn({ children, variant = "primary", onClick, style, disabled, "aria-label": ariaLabel, ...rest }) {
   const v = {
     primary: { background: T.accent, color: "#fff", fontWeight: "600", boxShadow: T.shadowAccent, padding: `${T.sp12}px ${T.sp24}px`, borderRadius: `${T.radiusMd}px`, fontSize: `${T.fontBody}px` },
     secondary: { background: T.bgInput, color: T.textSoft, fontWeight: "600", border: `1px solid rgba(26,20,18,0.08)`, padding: `${T.sp12}px ${T.sp20}px`, borderRadius: `${T.radiusMd}px`, fontSize: `${T.fontBody}px` },
@@ -135,7 +137,7 @@ function Btn({ children, variant = "primary", onClick, style, disabled, "aria-la
     small: { background: T.bgInput, color: T.textMuted, fontWeight: "600", padding: `${T.sp4}px ${T.sp12}px`, borderRadius: `${T.radiusSm}px`, fontSize: `${T.fontCaption}px`, border: `1px solid rgba(26,20,18,0.08)` },
     mint: { background: T.green, color: "#fff", fontWeight: "600", boxShadow: `0 2px 8px ${T.green}30`, padding: `${T.sp12}px ${T.sp24}px`, borderRadius: `${T.radiusMd}px`, fontSize: `${T.fontBody}px` },
   };
-  return <button onClick={onClick} disabled={disabled} aria-label={ariaLabel} style={{ ...btnBase, ...v[variant], opacity: disabled ? 0.4 : 1, minHeight: "44px", ...style }}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} aria-label={ariaLabel} {...rest} style={{ ...btnBase, ...v[variant], opacity: disabled ? 0.4 : 1, minHeight: "44px", ...style }}>{children}</button>;
 }
 
 function Card({ children, style, elevated, accent }) {
@@ -157,8 +159,8 @@ function Chip({ children, active, color, onClick, dimmed, small }) {
     e.currentTarget.style.animation = `chipPop ${T.dFast} ${T.easeExpressive}`;
     onClick?.();
   };
-  return <button onClick={handleClick} style={{ ...btnBase, display: "inline-flex", alignItems: "center", gap: `${T.sp4}px`, padding: small ? `${T.sp4}px ${T.sp12}px` : `${T.sp8}px ${T.sp16}px`, borderRadius: "10px", border: active ? `2px solid ${cl}` : `1.5px dashed rgba(26,20,18,0.15)`, background: active ? `${cl}12` : "transparent", fontSize: small ? `${T.fontMono}px` : `${T.fontSmall}px`, fontWeight: active ? "600" : "400", color: active ? T.text : (dimmed ? T.textFaint : T.textMuted), opacity: dimmed && !active ? 0.4 : 1, minHeight: small ? "36px" : "44px", transition: `background ${T.dFast} ${T.easeProductive}, border ${T.dFast} ${T.easeProductive}, color ${T.dFast} ${T.easeProductive}` }}>
-    {active && <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: cl, transition: `transform ${T.dFast} ${T.easeExpressive}` }} />}
+  return <button onClick={handleClick} data-chip="" style={{ ...btnBase, display: "inline-flex", alignItems: "center", gap: `${T.sp4}px`, padding: small ? `${T.sp4}px ${T.sp12}px` : `${T.sp8}px ${T.sp16}px`, borderRadius: "10px", border: active ? `2px solid ${cl}` : `1.5px dashed rgba(26,20,18,0.15)`, background: active ? `${cl}12` : "transparent", fontSize: small ? `${T.fontMono}px` : `${T.fontSmall}px`, fontWeight: active ? "600" : "400", color: active ? T.text : (dimmed ? T.textFaint : T.textMuted), opacity: dimmed && !active ? 0.4 : 1, minHeight: small ? "36px" : "44px", boxShadow: active ? `0 1px 4px ${cl}20` : "none", transition: `background ${T.dFast} ${T.easeProductive}, border ${T.dFast} ${T.easeProductive}, color ${T.dFast} ${T.easeProductive}, box-shadow ${T.dFast} ${T.easeProductive}, transform ${T.dFast} ${T.easeProductive}` }}>
+    {active && <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: cl, animation: `dotPop 250ms ${T.easeExpressive}` }} />}
     {children}
   </button>;
 }
@@ -289,7 +291,7 @@ function WeekPlanner({ weekIndex, weekDays, plan, config, onChange, isMobile }) 
   };
 
   return (
-    <Card style={{ marginBottom: `${T.sp12}px`, padding: `${T.sp16}px` }} accent={allCanceled ? T.red : null}>
+    <Card style={{ marginBottom: 0, padding: `${T.sp16}px` }} accent={allCanceled ? T.red : null}>
       {/* Header */}
       <div
         onClick={isMobile ? () => setCollapsed(c => !c) : undefined}
@@ -1062,33 +1064,63 @@ export default function CITScheduler() {
       {toast && <div role="alert" aria-live="assertive" style={{ position: "fixed", top: `${T.sp16}px`, left: "50%", transform: "translateX(-50%)", zIndex: 999, padding: `${T.sp12}px ${T.sp20}px`, borderRadius: `${T.radiusMd}px`, fontFamily: font, fontSize: `${T.fontBody}px`, fontWeight: "500", background: T.text, color: T.bg, boxShadow: "0 8px 32px rgba(26,20,18,0.2)", animation: toastExiting ? `toastOut ${T.dFast} ${T.easeProductive} forwards` : `toastIn ${T.dNormal} ${T.easeExpressive}` }}>{toast.msg}</div>}
 
       {/* HEADER — frosted glass sticky */}
-      <header style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(250,246,241,0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderBottom: "1px solid rgba(26,20,18,0.06)", padding: `${T.sp16}px ${T.sp20}px` }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: `${T.sp12}px` }}>
-          <button onClick={() => setShowWelcome(true)} aria-label="Help" style={{ ...btnBase, background: "none", fontSize: `${T.fontMono}px`, padding: `${T.sp4}px ${T.sp8}px`, color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>❓</button>
-          <div style={{ fontFamily: font, fontSize: `${T.fontCaption}px`, fontWeight: "600", color: T.accent, textTransform: "uppercase", letterSpacing: "0.12em" }}>CIT SCHEDULER</div>
-          <button onClick={() => setShowSettings(true)} aria-label="Settings" style={{ ...btnBase, background: "none", fontSize: `${T.fontCardTitle}px`, padding: `${T.sp4}px ${T.sp8}px`, color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>⚙️</button>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: `${T.sp20}px`, marginBottom: `${T.sp12}px` }}>
-          <button onClick={() => chgMonth(-1)} aria-label="Previous month" style={{ ...btnBase, background: "none", fontSize: "22px", color: T.textMuted, padding: `${T.sp4}px ${T.sp8}px`, minHeight: "44px", minWidth: "44px" }}>‹</button>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontFamily: font, fontSize: `${T.fontHero}px`, fontWeight: "700", color: T.text, letterSpacing: "-0.02em", lineHeight: 1 }}>{monthName}</div>
-            <div style={{ fontFamily: fontMono, fontSize: `${T.fontSmall}px`, color: T.textMuted, fontWeight: "500", marginTop: `${T.sp4}px` }}>{year}</div>
-          </div>
-          <button onClick={() => chgMonth(1)} aria-label="Next month" style={{ ...btnBase, background: "none", fontSize: "22px", color: T.textMuted, padding: `${T.sp4}px ${T.sp8}px`, minHeight: "44px", minWidth: "44px" }}>›</button>
-        </div>
-        <div style={{ display: "flex", justifyContent: "center", gap: bp.isMobile ? `${T.sp16}px` : `${T.sp32}px`, padding: `${T.sp4}px 0` }}>
-          <StatBox value={weeks.length} label="Weeks" color={T.accent} />
-          <StatBox value={activeDates.length} label="Active" color={T.mint} />
-          <StatBox value={schedule ? `${filledSlots}/${totalSlots}` : "—"} label="Filled" color={filledSlots === totalSlots ? T.green : T.amber} />
+      <header style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(250,246,241,0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderBottom: "1px solid rgba(26,20,18,0.06)", padding: bp.isWide ? `${T.sp16}px ${T.sp48}px` : `${T.sp16}px ${T.sp20}px` }}>
+        <div style={{ maxWidth: bp.isWide ? "1200px" : "100%", margin: "0 auto" }}>
+          {bp.isWide ? (
+            /* ── Desktop header: horizontal, dramatic ── */
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: `${T.sp32}px` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: `${T.sp16}px` }}>
+                <button onClick={() => setShowWelcome(true)} aria-label="Help" style={{ ...btnBase, background: "none", fontSize: `${T.fontMono}px`, padding: `${T.sp4}px ${T.sp8}px`, color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>❓</button>
+                <div style={{ display: "flex", alignItems: "baseline", gap: `${T.sp12}px` }}>
+                  <button onClick={() => chgMonth(-1)} aria-label="Previous month" style={{ ...btnBase, background: "none", fontSize: "24px", color: T.textMuted, padding: `${T.sp4}px`, minHeight: "44px", minWidth: "44px" }}>‹</button>
+                  <div style={{ fontFamily: font, fontSize: "48px", fontWeight: "800", color: T.text, letterSpacing: "-0.03em", lineHeight: 1 }}>{monthName}</div>
+                  <div style={{ fontFamily: font, fontSize: "20px", fontWeight: "400", color: T.textFaint, letterSpacing: "-0.01em" }}>{year}</div>
+                  <button onClick={() => chgMonth(1)} aria-label="Next month" style={{ ...btnBase, background: "none", fontSize: "24px", color: T.textMuted, padding: `${T.sp4}px`, minHeight: "44px", minWidth: "44px" }}>›</button>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: `${T.sp32}px` }}>
+                <div style={{ display: "flex", gap: `${T.sp24}px` }}>
+                  <StatBox value={weeks.length} label="Weeks" color={T.accent} />
+                  <StatBox value={activeDates.length} label="Active" color={T.mint} />
+                  <StatBox value={schedule ? `${filledSlots}/${totalSlots}` : "—"} label="Filled" color={filledSlots === totalSlots ? T.green : T.amber} />
+                </div>
+                <div style={{ width: "1px", height: "32px", background: T.border }} />
+                <div style={{ fontFamily: font, fontSize: `${T.fontCaption}px`, fontWeight: "600", color: T.accent, textTransform: "uppercase", letterSpacing: "0.12em" }}>CIT SCHEDULER</div>
+                <button onClick={() => setShowSettings(true)} aria-label="Settings" style={{ ...btnBase, background: "none", fontSize: `${T.fontCardTitle}px`, padding: `${T.sp4}px ${T.sp8}px`, color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>⚙️</button>
+              </div>
+            </div>
+          ) : (
+            /* ── Mobile/tablet header: vertical, compact ── */
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: `${T.sp12}px` }}>
+                <button onClick={() => setShowWelcome(true)} aria-label="Help" style={{ ...btnBase, background: "none", fontSize: `${T.fontMono}px`, padding: `${T.sp4}px ${T.sp8}px`, color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>❓</button>
+                <div style={{ fontFamily: font, fontSize: `${T.fontCaption}px`, fontWeight: "600", color: T.accent, textTransform: "uppercase", letterSpacing: "0.12em" }}>CIT SCHEDULER</div>
+                <button onClick={() => setShowSettings(true)} aria-label="Settings" style={{ ...btnBase, background: "none", fontSize: `${T.fontCardTitle}px`, padding: `${T.sp4}px ${T.sp8}px`, color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>⚙️</button>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: `${T.sp20}px`, marginBottom: `${T.sp12}px` }}>
+                <button onClick={() => chgMonth(-1)} aria-label="Previous month" style={{ ...btnBase, background: "none", fontSize: "22px", color: T.textMuted, padding: `${T.sp4}px ${T.sp8}px`, minHeight: "44px", minWidth: "44px" }}>‹</button>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontFamily: font, fontSize: `${T.fontHero}px`, fontWeight: "700", color: T.text, letterSpacing: "-0.02em", lineHeight: 1 }}>{monthName}</div>
+                  <div style={{ fontFamily: fontMono, fontSize: `${T.fontSmall}px`, color: T.textMuted, fontWeight: "500", marginTop: `${T.sp4}px` }}>{year}</div>
+                </div>
+                <button onClick={() => chgMonth(1)} aria-label="Next month" style={{ ...btnBase, background: "none", fontSize: "22px", color: T.textMuted, padding: `${T.sp4}px ${T.sp8}px`, minHeight: "44px", minWidth: "44px" }}>›</button>
+              </div>
+              <div style={{ display: "flex", justifyContent: "center", gap: bp.isMobile ? `${T.sp16}px` : `${T.sp32}px`, padding: `${T.sp4}px 0` }}>
+                <StatBox value={weeks.length} label="Weeks" color={T.accent} />
+                <StatBox value={activeDates.length} label="Active" color={T.mint} />
+                <StatBox value={schedule ? `${filledSlots}/${totalSlots}` : "—"} label="Filled" color={filledSlots === totalSlots ? T.green : T.amber} />
+              </div>
+            </>
+          )}
         </div>
       </header>
 
       {/* NAV */}
-      <nav role="tablist" aria-label="Main navigation" style={{ display: "flex", gap: 0, padding: `0 ${T.sp16}px`, overflowX: "auto", borderBottom: "1px solid rgba(26,20,18,0.08)", background: T.bgCard }}>
-        {navItems.map(n => <button key={n.key} id={`tab-${n.key}`} role="tab" aria-selected={view === n.key} aria-controls={`panel-${n.key}`} tabIndex={view === n.key ? 0 : -1} onClick={() => switchView(n.key)} style={{ ...btnBase, padding: `${T.sp12}px ${T.sp16}px`, borderRadius: 0, fontSize: `${T.fontMono}px`, fontWeight: view === n.key ? "600" : "500", whiteSpace: "nowrap", background: "transparent", color: view === n.key ? T.accent : T.textMuted, borderBottom: `2px solid ${view === n.key ? T.accent : 'transparent'}`, minHeight: "44px", transition: `color ${T.dFast} ${T.easeProductive}, border-color ${T.dFast} ${T.easeProductive}` }}>{n.icon} {n.label}</button>)}
+      <nav role="tablist" aria-label="Main navigation" style={{ display: "flex", gap: 0, padding: bp.isWide ? `0 ${T.sp48}px` : `0 ${T.sp16}px`, overflowX: "auto", borderBottom: "1px solid rgba(26,20,18,0.08)", background: T.bgCard, justifyContent: bp.isWide ? "center" : "flex-start" }}>
+        {navItems.map(n => <button key={n.key} id={`tab-${n.key}`} role="tab" aria-selected={view === n.key} aria-controls={`panel-${n.key}`} tabIndex={view === n.key ? 0 : -1} onClick={() => switchView(n.key)} style={{ ...btnBase, padding: bp.isWide ? `${T.sp16}px ${T.sp32}px` : `${T.sp12}px ${T.sp16}px`, borderRadius: 0, fontSize: bp.isWide ? `${T.fontBody}px` : `${T.fontMono}px`, fontWeight: view === n.key ? "600" : "500", whiteSpace: "nowrap", background: "transparent", color: view === n.key ? T.accent : T.textMuted, borderBottom: `2px solid ${view === n.key ? T.accent : 'transparent'}`, minHeight: "44px", letterSpacing: bp.isWide ? "0.02em" : "0", transition: `color ${T.dFast} ${T.easeProductive}, border-color ${T.dFast} ${T.easeProductive}` }}>{n.icon} {n.label}</button>)}
       </nav>
 
-      <main id="main-content" style={{ padding: bp.isMobile ? `${T.sp16}px` : `${T.sp24}px`, maxWidth: bp.isDesktop ? "720px" : bp.isTablet ? "640px" : "100%", margin: "0 auto", opacity: tabAnim ? 0 : 1, transform: tabAnim ? "translateY(4px)" : "translateY(0)", transition: tabAnim ? `opacity 100ms ${T.easeProductive}` : `opacity 200ms ${T.easeExpressive}, transform 200ms ${T.easeExpressive}` }}>
+      <main id="main-content" style={{ padding: bp.isMobile ? `${T.sp16}px` : bp.isWide ? `${T.sp40}px ${T.sp48}px` : `${T.sp24}px`, maxWidth: bp.isWide ? "1200px" : bp.isDesktop ? "960px" : bp.isTablet ? "640px" : "100%", margin: "0 auto", opacity: tabAnim ? 0 : 1, transform: tabAnim ? "translateY(4px)" : "translateY(0)", transition: tabAnim ? `opacity 100ms ${T.easeProductive}` : `opacity 200ms ${T.easeExpressive}, transform 200ms ${T.easeExpressive}` }}>
 
         {/* ═══ PLAN TAB ═══ */}
         {view === "plan" && <div id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
@@ -1098,7 +1130,9 @@ export default function CITScheduler() {
               <strong>◀ ▶</strong> shifts all 3 days forward/back by one day. Use dropdowns for individual day changes. <strong>Cancel</strong> removes the entire week.
             </p>
           </Card>
-          {weeks.map((wd, wi) => <WeekPlanner key={wi} weekIndex={wi} weekDays={wd} plan={weekPlans[`week${wi}`]} config={config} onChange={plan => updateWeekPlan(wi, plan)} isMobile={bp.isMobile} />)}
+          <div style={{ display: "grid", gridTemplateColumns: bp.isWide ? "1fr 1fr" : "1fr", gap: `${T.sp12}px` }}>
+            {weeks.map((wd, wi) => <WeekPlanner key={wi} weekIndex={wi} weekDays={wd} plan={weekPlans[`week${wi}`]} config={config} onChange={plan => updateWeekPlan(wi, plan)} isMobile={bp.isMobile} />)}
+          </div>
           <div style={{ marginTop: "20px", textAlign: "center" }}>
             <p style={{ fontSize: "13px", color: T.textMuted, marginBottom: "12px" }}>Once your days are set, go to <strong style={{ color: T.text }}>Actors</strong> to mark availability.</p>
             <Btn onClick={() => switchView("availability")}>📋 Set Availability →</Btn>
@@ -1178,8 +1212,9 @@ export default function CITScheduler() {
             const plan = weekPlans[`week${wi}`] || getDefaultWeekPlan(wd, config);
             const activeSlots = SLOT_KEYS.filter(sk => plan[sk]);
             if (!activeSlots.length) return <Card key={wi} style={{ marginBottom: "10px", opacity: 0.5 }}><span style={{ fontFamily: fontMono, fontSize: "11px", color: T.textMuted }}>WK{wi + 1}</span> <Badge type="error">CANCELED</Badge></Card>;
-            return <div key={wi} style={{ marginBottom: "20px" }}>
+            return <div key={wi} style={{ marginBottom: bp.isWide ? "32px" : "20px" }}>
               <div style={{ fontFamily: fontMono, fontSize: "11px", fontWeight: "700", color: T.textMuted, letterSpacing: "1.5px", marginBottom: "8px" }}>WEEK {wi + 1}</div>
+              <div style={{ display: "grid", gridTemplateColumns: bp.isWide ? "1fr 1fr 1fr" : bp.isDesktop ? "1fr 1fr" : "1fr", gap: `${T.sp8}px` }}>
               {activeSlots.map(sk => {
                 const ds = plan[sk]; if (!ds) return null;
                 const dayInfo = wd.find(w => w.date === ds);
@@ -1214,10 +1249,11 @@ export default function CITScheduler() {
                   <div style={{ fontSize: "10px", color: T.textFaint, marginTop: "4px" }}>Tap actor to cycle: Both → ☀️ AM → 🌙 PM → Off</div>
                 </Card>;
               })}
+              </div>
             </div>;
           })}
           <div style={{ height: `${T.sp64}px` }} />
-          <div style={{ position: "sticky", bottom: `${T.sp16}px`, textAlign: "center", padding: `${T.sp12}px ${T.sp8}px`, background: "rgba(250,246,241,0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: `${T.radiusLg}px`, border: "1px solid rgba(26,20,18,0.06)" }}><Btn onClick={handleGenerate} disabled={generating} style={{ width: "100%", maxWidth: "400px", padding: `${T.sp16}px`, fontSize: `${T.fontCardTitle}px`, borderRadius: `${T.radiusMd}px`, boxShadow: T.shadowAccent }}>{generating ? <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><span style={{ width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 600ms linear infinite", display: "inline-block" }} />Generating…</span> : "⚡ Generate Schedule"}</Btn></div>
+          <div style={{ position: "sticky", bottom: `${T.sp16}px`, textAlign: "center", padding: `${T.sp12}px ${T.sp8}px`, background: "rgba(250,246,241,0.85)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderRadius: `${T.radiusLg}px`, border: "1px solid rgba(26,20,18,0.06)" }}><Btn data-generate="" onClick={handleGenerate} disabled={generating} style={{ width: "100%", maxWidth: "400px", padding: `${T.sp16}px`, fontSize: `${T.fontCardTitle}px`, borderRadius: `${T.radiusMd}px`, boxShadow: T.shadowAccent }}>{generating ? <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><span style={{ width: "16px", height: "16px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 600ms linear infinite", display: "inline-block" }} />Generating…</span> : "⚡ Generate Schedule"}</Btn></div>
         </div>}
 
         {/* ═══ SCHEDULE TAB ═══ */}
@@ -1239,15 +1275,17 @@ export default function CITScheduler() {
               const wk = `week${wi}`, plan = weekPlans[wk] || getDefaultWeekPlan(wd, config);
               const activeSlots = SLOT_KEYS.filter(sk => plan[sk] && schedule[wk]?.[sk]);
               if (!activeSlots.length) return <Card key={wi} style={{ marginBottom: "8px", opacity: 0.5 }}><span style={{ fontFamily: fontMono, fontSize: "11px", color: T.textMuted }}>WK{wi + 1}</span> <Badge type="error">CANCELED</Badge></Card>;
-              return <div key={`${wi}-${scheduleReveal}`} style={{ marginBottom: "20px", animation: scheduleReveal ? `cardStagger ${T.dNormal} ${T.easeExpressive} both` : "none", animationDelay: scheduleReveal ? `${wi * 50}ms` : "0ms" }}>
+              return <div key={`${wi}-${scheduleReveal}`} style={{ marginBottom: bp.isWide ? "32px" : "20px", animation: scheduleReveal ? `cardStagger ${T.dNormal} ${T.easeExpressive} both` : "none", animationDelay: scheduleReveal ? `${wi * 50}ms` : "0ms" }}>
                 <div style={{ fontFamily: fontMono, fontSize: "11px", fontWeight: "700", color: T.textMuted, letterSpacing: "1.5px", marginBottom: "8px" }}>WEEK {wi + 1}</div>
+                <div style={{ display: "grid", gridTemplateColumns: bp.isWide ? "1fr 1fr 1fr" : bp.isDesktop ? "1fr 1fr" : "1fr", gap: `${T.sp8}px` }}>
                 {activeSlots.map(sk => {
                   const ds = plan[sk], di = wd.find(w => w.date === ds);
                   const scenarios = config.slotScenarios[sk] || [];
                   const cl = slotColors[sk];
-                  return <Card key={sk} style={{ marginBottom: "8px" }} accent={cl}>
+                  return <Card key={sk} style={{ marginBottom: 0 }} accent={cl}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "14px", flexWrap: "wrap" }}><SlotBar slotKey={sk} /><span style={{ fontWeight: "700", fontSize: "15px" }}>{di?.dayName}</span><span style={{ fontFamily: fontMono, fontSize: "12px", color: T.textMuted }}>{fmtDate(ds)}</span><Badge type="accent">{config.slotNames[sk]}</Badge></div>
-                    {SHIFTS.map(shift => <div key={shift} style={{ marginBottom: shift === "AM" ? "14px" : 0 }}>
+                    <div style={bp.isDesktop ? { display: "grid", gridTemplateColumns: "1fr 1fr", gap: `${T.sp16}px` } : {}}>
+                    {SHIFTS.map(shift => <div key={shift} style={{ marginBottom: bp.isDesktop ? 0 : (shift === "AM" ? "14px" : 0) }}>
                       <div style={{ fontFamily: fontMono, fontSize: "10px", fontWeight: "700", color: T.textMuted, letterSpacing: "1px", marginBottom: "6px" }}>{shift === "AM" ? "☀️ NOON TOUR" : "🌙 8 PM TOUR"}</div>
                       {scenarios.map(sc => {
                         const actor = schedule[wk]?.[sk]?.[shift]?.[sc];
@@ -1270,8 +1308,10 @@ export default function CITScheduler() {
                         </div>;
                       })}
                     </div>)}
+                    </div>
                   </Card>;
                 })}
+                </div>
               </div>;
             })}
             <div style={{ height: `${T.sp64}px` }} />
@@ -1288,13 +1328,15 @@ export default function CITScheduler() {
             <div style={{ fontSize: "11px", color: T.textMuted, fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Distribution Evenness</div>
             <div style={{ fontSize: "12px", color: T.textSoft, marginTop: "4px" }}>Target: ~{Math.round(fr.fairTarget)} shifts per actor</div>
           </Card>; })()}
+          <div style={{ display: "grid", gridTemplateColumns: bp.isWide ? "1fr 1fr" : "1fr", gap: `${T.sp8}px` }}>
           {sortedActors.map(actor => { const s = actorStats[actor] || { total: 0, scenarios: {} }; const cl = config.actorColors[actor] || T.textSoft; const approvedFor = Object.entries(config.scenarioActors).filter(([, a]) => a.includes(actor)).map(([sc]) => sc); const ad = activeDates.filter(d => normalizeAvail(availability[d]?.[actor])).length; const fi = fairnessReport?.actors?.[actor]; const badgeColor = !fi ? null : fi.gapCategory === 'fair' ? T.green : fi.gapCategory === 'under_structural' ? T.amber : fi.gapCategory === 'under_algorithmic' ? T.coral : fi.gapCategory === 'over' ? T.accent : null;
-            return <Card key={actor} style={{ marginBottom: "8px" }} accent={s.total > 0 ? cl : null}>
+            return <Card key={actor} style={{ marginBottom: 0 }} accent={s.total > 0 ? cl : null}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><div style={{ display: "flex", alignItems: "center", gap: "12px" }}><div style={{ width: "38px", height: "38px", borderRadius: "10px", background: `${cl}20`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "15px", color: cl, border: `1.5px solid ${cl}30` }}>{actor[0]}</div><div><div style={{ fontWeight: "700", fontSize: "14px" }}>{actor}{fi && badgeColor && <span style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "4px", marginLeft: "8px", background: `${badgeColor}15`, color: badgeColor, fontWeight: "600", border: `1px solid ${badgeColor}25` }}>{s.total}/{Math.round(fi.target)}</span>}</div><div style={{ fontSize: "11px", color: T.textMuted }}>Avail {ad}/{activeDates.length} · {s.total} shift{s.total !== 1 ? "s" : ""}</div></div></div>{s.total > 0 && <div style={{ fontFamily: fontMono, fontSize: "20px", fontWeight: "700", color: cl, textShadow: `0 0 12px ${cl}30` }}>{s.total}</div>}</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "8px" }}>{approvedFor.map(sc => <span key={sc} style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "6px", background: s.scenarios[sc] ? `${cl}15` : T.bgRaised, color: s.scenarios[sc] ? cl : T.textFaint, fontWeight: s.scenarios[sc] ? "600" : "400", border: `1px solid ${s.scenarios[sc] ? `${cl}25` : T.border}` }}>{config.scenarioIcons[sc] || ""} {sc}{s.scenarios[sc] ? ` ×${s.scenarios[sc]}` : ""}</span>)}</div>
               {fi?.gapExplanation && <div style={{ fontSize: "11px", color: badgeColor, marginTop: "6px", padding: "4px 8px", borderRadius: "6px", background: `${badgeColor}08`, border: `1px solid ${badgeColor}15` }}>{fi.gapCategory === 'under_structural' ? '📌' : fi.gapCategory === 'over' ? '📈' : '⚠️'} {fi.gapExplanation}</div>}
             </Card>;
           })}
+          </div>
           {schedule && (() => { const mx = Math.max(...config.actors.map(a => (actorStats[a] || { total: 0 }).total), 1); const targetPct = fairnessReport ? (fairnessReport.fairTarget / mx) * 100 : 0; return <Card style={{ marginTop: "14px", background: T.accentSoft }}><SectionHead icon="⚖️" title="Balance" /><div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>{config.actors.filter(a => (actorStats[a] || { total: 0 }).total > 0).sort((a, b) => (actorStats[b]?.total || 0) - (actorStats[a]?.total || 0)).map(actor => { const s = actorStats[actor] || { total: 0 }; const pct = (s.total / mx) * 100; const cl = config.actorColors[actor] || T.accent; return <div key={actor} style={{ flex: "1 0 45%", minWidth: "140px" }}><div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }}><span style={{ fontWeight: "600" }}>{actor}</span><span style={{ fontFamily: fontMono, color: T.textMuted, fontSize: "11px" }}>{s.total}</span></div><div style={{ position: "relative", height: "8px", borderRadius: "4px", background: T.border, overflow: "hidden" }}><div style={{ height: "100%", width: `${pct}%`, borderRadius: "4px", background: `linear-gradient(90deg,${cl},${cl}BB)`, boxShadow: `0 0 8px ${cl}30`, transition: `width ${T.dSlow} ${T.easeExpressive}` }} />{fairnessReport && <div style={{ position: "absolute", left: `${targetPct}%`, top: "-2px", bottom: "-2px", width: "2px", background: T.textMuted, opacity: 0.5, borderRadius: "1px" }} />}</div></div> })}</div>{fairnessReport && <div style={{ fontSize: "11px", color: T.textMuted, marginTop: "8px", textAlign: "center" }}>Target: ~{Math.round(fairnessReport.fairTarget)} shifts</div>}</Card>; })()}
         </div>}
 
@@ -1323,6 +1365,18 @@ export default function CITScheduler() {
         @media(max-width:480px){
           body{overflow-x:hidden}
         }
+        /* ── Chip hover: subtle lift ── */
+        [data-chip]:hover:not(:active){transform:translateY(-1px);box-shadow:0 2px 8px rgba(26,20,18,0.08)!important}
+        [data-chip]:active{transform:scale(0.95)!important}
+        /* ── Tab hover: warm tint ── */
+        [role="tab"]:hover{background:rgba(212,96,58,0.05)!important}
+        [role="tab"][aria-selected="true"]:hover{background:rgba(212,96,58,0.08)!important}
+        [role="tab"]{transition:background ${T.dFast} ${T.easeProductive},color ${T.dFast} ${T.easeProductive},border-color ${T.dNormal} ${T.easeExpressive}!important}
+        /* ── Generate button: hover lift + idle pulse ── */
+        [data-generate]:not(:disabled):hover{transform:translateY(-2px)!important;box-shadow:0 6px 24px rgba(212,96,58,0.35),0 0 0 3px rgba(212,96,58,0.1)!important}
+        [data-generate]:not(:disabled){animation:pulseReady 2.5s cubic-bezier(0.4,0,0.2,1) infinite}
+        [data-generate]:hover{animation:none!important}
+        [data-generate]:active{transform:scale(0.97) translateY(0)!important}
       `}</style>
 
       {/* Back to top floating button */}
