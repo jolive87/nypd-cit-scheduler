@@ -772,3 +772,73 @@ export function genActorMsg(actor, weeks, weekPlans, schedule, monthName, year, 
 
   return lines.join("\n");
 }
+
+// ---------------------------------------------------------------------------
+// Stats Report — shareable text summary with contact info
+// ---------------------------------------------------------------------------
+
+/**
+ * Generates a formatted text stats report for the month.
+ *
+ * @param {Object} actorStats - from getActorStats
+ * @param {Object} fairnessReport - from generateSchedule
+ * @param {string} monthName
+ * @param {number|string} year
+ * @param {Object} config - needs actors, actorPhones, scenarioIcons
+ * @returns {string}
+ */
+export function genStatsReport(actorStats, fairnessReport, monthName, year, config) {
+  const lines = [];
+  lines.push("\uD83D\uDCCA CIT ACTOR STATS REPORT");
+  lines.push(`${monthName.toUpperCase()} ${year}`);
+  lines.push("\u2501".repeat(32));
+
+  if (fairnessReport) {
+    lines.push("");
+    lines.push(`Distribution Evenness: ${fairnessReport.overallFairness}%`);
+    lines.push(`Target: ~${Math.round(fairnessReport.fairTarget)} shifts per actor`);
+    lines.push(`Total Slots: ${fairnessReport.totalSlots}`);
+  }
+
+  lines.push("");
+  lines.push("ACTOR BREAKDOWN");
+  lines.push("\u2500".repeat(28));
+
+  const sorted = [...config.actors]
+    .filter(a => (actorStats[a]?.total || 0) > 0)
+    .sort((a, b) => (actorStats[b]?.total || 0) - (actorStats[a]?.total || 0));
+
+  for (const actor of sorted) {
+    const s = actorStats[actor] || { total: 0, scenarios: {} };
+    const phone = config.actorPhones?.[actor];
+    lines.push("");
+    lines.push(`\u25A0 ${actor}${phone ? `  \uD83D\uDCF1 ${phone}` : ""}`);
+    lines.push(`  Shifts: ${s.total}`);
+    const scenList = Object.entries(s.scenarios)
+      .sort((a, b) => b[1] - a[1])
+      .map(([sc, count]) => `${config.scenarioIcons?.[sc] || "\u2022"} ${sc} \u00D7${count}`)
+      .join("  ");
+    if (scenList) lines.push(`  ${scenList}`);
+    if (fairnessReport?.actors?.[actor]) {
+      const fi = fairnessReport.actors[actor];
+      const gap = fi.gap > 0 ? `+${fi.gap}` : `${fi.gap}`;
+      lines.push(`  vs target: ${gap}`);
+    }
+  }
+
+  const inactive = config.actors.filter(a => (actorStats[a]?.total || 0) === 0);
+  if (inactive.length > 0) {
+    lines.push("");
+    lines.push("NOT SCHEDULED");
+    lines.push("\u2500".repeat(28));
+    for (const actor of inactive) {
+      const phone = config.actorPhones?.[actor];
+      lines.push(`  ${actor}${phone ? `  \uD83D\uDCF1 ${phone}` : ""}`);
+    }
+  }
+
+  lines.push("");
+  lines.push(`Generated ${new Date().toLocaleDateString()}`);
+
+  return lines.join("\n");
+}

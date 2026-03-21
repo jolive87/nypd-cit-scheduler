@@ -31,6 +31,7 @@ export const DEFAULT_CONFIG = {
   conflicts: [{ actor_cannot_play:["Jumper","Depression"], scope:"same_shift" }],
   shiftTimes: { AM:"Noon", PM:"8 PM" },
   actorConstraints: {},
+  actorPhones: {},
   actorSortOrder: {
     "Decatur": 0, "Sat Charn": 1, "Mara": 2, "Rumi": 3, "Rich": 4,
     "Antonia": 5, "Doc": 6, "Qurrat": 7, "Nicole": 8, "Edwin": 9, "Chris": 10,
