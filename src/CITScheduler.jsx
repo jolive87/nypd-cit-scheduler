@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import storage, { exportBackup, importBackup } from "./storage.js";
+import storage, { exportBackup, importBackup, getSyncStatus, onSyncChange } from "./storage.js";
 import { DEFAULT_CONFIG, ALL_WEEKDAYS, COLOR_PALETTE, ICON_OPTIONS, T, slotColors, font, fontMono } from "./config.js";
 import { generateSchedule, getActorStats, genShareText, genActorMsg, genStatsReport, getDefaultWeekPlan, fmtDate, fmtDateShort, normalizeAvail, SLOT_KEYS, SHIFTS } from "./scheduler.js";
 import { generateICS, downloadICS } from "./ics.js";
@@ -833,6 +833,9 @@ export default function CITScheduler() {
   const [fairnessReport, setFairnessReport] = useState(null);
   const [availView, setAvailView] = useState("compact");
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(getSyncStatus());
+
+  useEffect(() => onSyncChange(setSyncStatus), []);
 
   const weeks = getWeeksInMonth(year, month);
   const monthName = new Date(year, month).toLocaleString('default', { month: 'long' });
@@ -1022,6 +1025,7 @@ export default function CITScheduler() {
       }
       return n;
     });
+    showT(actor ? `${actor} → ${sc} saved` : `${sc} cleared`, "success");
   };
 
   const exportICSFile = () => {
@@ -1085,7 +1089,10 @@ export default function CITScheduler() {
                   <StatBox value={schedule ? `${filledSlots}/${totalSlots}` : "—"} label="Filled" color={filledSlots === totalSlots ? T.green : T.amber} />
                 </div>
                 <div style={{ width: "1px", height: "32px", background: T.border }} />
-                <div style={{ fontFamily: font, fontSize: `${T.fontCaption}px`, fontWeight: "600", color: T.accent, textTransform: "uppercase", letterSpacing: "0.12em" }}>CIT SCHEDULER</div>
+                <div style={{ display: "flex", alignItems: "center", gap: `${T.sp8}px` }}>
+                  <div style={{ fontFamily: font, fontSize: `${T.fontCaption}px`, fontWeight: "600", color: T.accent, textTransform: "uppercase", letterSpacing: "0.12em" }}>CIT SCHEDULER</div>
+                  <div title={syncStatus === 'synced' ? 'Synced to cloud' : syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'offline' ? 'Offline — local only' : syncStatus === 'error' ? 'Sync error' : 'Connecting...'} style={{ width: "8px", height: "8px", borderRadius: "50%", background: syncStatus === 'synced' ? T.green : syncStatus === 'syncing' ? T.amber : syncStatus === 'offline' ? T.textFaint : syncStatus === 'error' ? T.red : T.textFaint, boxShadow: syncStatus === 'synced' ? `0 0 6px ${T.green}40` : 'none', transition: `background ${T.dNormal} ${T.easeProductive}` }} />
+                </div>
                 <button onClick={() => setShowSettings(true)} aria-label="Settings" style={{ ...btnBase, background: "none", fontSize: `${T.fontCardTitle}px`, padding: `${T.sp4}px ${T.sp8}px`, color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>⚙️</button>
               </div>
             </div>
@@ -1094,7 +1101,10 @@ export default function CITScheduler() {
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: `${T.sp12}px` }}>
                 <button onClick={() => setShowWelcome(true)} aria-label="Help" style={{ ...btnBase, background: "none", fontSize: `${T.fontMono}px`, padding: `${T.sp4}px ${T.sp8}px`, color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>❓</button>
-                <div style={{ fontFamily: font, fontSize: `${T.fontCaption}px`, fontWeight: "600", color: T.accent, textTransform: "uppercase", letterSpacing: "0.12em" }}>CIT SCHEDULER</div>
+                <div style={{ display: "flex", alignItems: "center", gap: `${T.sp4}px` }}>
+                  <div style={{ fontFamily: font, fontSize: `${T.fontCaption}px`, fontWeight: "600", color: T.accent, textTransform: "uppercase", letterSpacing: "0.12em" }}>CIT SCHEDULER</div>
+                  <div title={syncStatus === 'synced' ? 'Synced to cloud' : syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'offline' ? 'Offline — local only' : syncStatus === 'error' ? 'Sync error' : 'Connecting...'} style={{ width: "7px", height: "7px", borderRadius: "50%", background: syncStatus === 'synced' ? T.green : syncStatus === 'syncing' ? T.amber : syncStatus === 'offline' ? T.textFaint : syncStatus === 'error' ? T.red : T.textFaint, boxShadow: syncStatus === 'synced' ? `0 0 6px ${T.green}40` : 'none', transition: `background ${T.dNormal} ${T.easeProductive}` }} />
+                </div>
                 <button onClick={() => setShowSettings(true)} aria-label="Settings" style={{ ...btnBase, background: "none", fontSize: `${T.fontCardTitle}px`, padding: `${T.sp4}px ${T.sp8}px`, color: T.textMuted, minHeight: "44px", minWidth: "44px" }}>⚙️</button>
               </div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: `${T.sp20}px`, marginBottom: `${T.sp12}px` }}>

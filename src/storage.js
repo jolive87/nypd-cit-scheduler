@@ -1,16 +1,35 @@
-// Storage adapter — dual-write to localStorage (fast cache) + Supabase (cloud backup)
-// localStorage is always the primary read source. Supabase syncs in background.
+// Storage adapter — dual-write to localStorage (fast cache) + Supabase (cloud sync)
+// On load: sync with Supabase using timestamps to always get the latest data.
+// Writes go to both localStorage + Supabase simultaneously.
 // App works fully offline if Supabase is unreachable.
 
 import { supabase } from './supabase.js';
 
-// --- Supabase helpers (fire-and-forget, never block the UI) ---
+// --- Sync state (observable by the UI) ---
+
+let _syncStatus = 'pending'; // 'pending' | 'syncing' | 'synced' | 'offline' | 'error'
+let _syncListeners = [];
+
+export function getSyncStatus() { return _syncStatus; }
+export function onSyncChange(fn) {
+  _syncListeners.push(fn);
+  return () => { _syncListeners = _syncListeners.filter(f => f !== fn); };
+}
+function setSyncStatus(s) {
+  _syncStatus = s;
+  _syncListeners.forEach(fn => fn(s));
+}
+
+// --- Supabase helpers ---
 
 function supabaseSet(key, value) {
   if (!supabase) return;
+  const ts = new Date().toISOString();
+  // Store timestamp locally so we can compare on next load
+  try { localStorage.setItem(`${key}__ts`, ts); } catch {}
   supabase
     .from('cit_storage')
-    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    .upsert({ key, value, updated_at: ts }, { onConflict: 'key' })
     .then(({ error }) => {
       if (error) console.warn('Supabase write failed:', key, error.message);
     });
@@ -18,6 +37,7 @@ function supabaseSet(key, value) {
 
 function supabaseDelete(key) {
   if (!supabase) return;
+  try { localStorage.removeItem(`${key}__ts`); } catch {}
   supabase
     .from('cit_storage')
     .delete()
@@ -42,69 +62,117 @@ async function supabaseGet(key) {
   }
 }
 
-async function supabaseList(prefix) {
-  if (!supabase) return [];
-  try {
-    const { data, error } = await supabase
-      .from('cit_storage')
-      .select('key')
-      .like('key', `${prefix}%`);
-    if (error || !data) return [];
-    return data.map((row) => row.key);
-  } catch {
-    return [];
+// --- Cloud sync: pull latest from Supabase on every page load ---
+
+let syncDone = false;
+let syncPromise = null;
+
+function syncWithSupabase() {
+  if (syncDone || !supabase) {
+    if (!supabase) setSyncStatus('offline');
+    return Promise.resolve();
   }
+  if (syncPromise) return syncPromise;
+
+  setSyncStatus('syncing');
+  syncPromise = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cit_storage')
+        .select('key, value, updated_at')
+        .like('key', 'cit-v4-%');
+
+      if (error) {
+        console.warn('Supabase sync failed:', error.message);
+        setSyncStatus('error');
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        // No remote data — push local data up to Supabase as initial seed
+        let pushed = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('cit-v4-') && !key.endsWith('__ts')) {
+            const value = localStorage.getItem(key);
+            if (value) { supabaseSet(key, value); pushed++; }
+          }
+        }
+        if (pushed > 0) console.log(`Pushed ${pushed} local items to Supabase`);
+        setSyncStatus('synced');
+        syncDone = true;
+        return;
+      }
+
+      // Compare timestamps: use whichever version is newer
+      let updated = 0;
+      for (const row of data) {
+        const localTs = localStorage.getItem(`${row.key}__ts`);
+        const remoteTs = row.updated_at;
+
+        if (!localTs || remoteTs > localTs) {
+          // Remote is newer (or local has no timestamp) — use remote
+          localStorage.setItem(row.key, row.value);
+          localStorage.setItem(`${row.key}__ts`, remoteTs);
+          updated++;
+        }
+        // If local is newer, it will be pushed on next write (already happening)
+      }
+
+      // Also push any local keys that don't exist in Supabase
+      const remoteKeys = new Set(data.map(r => r.key));
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('cit-v4-') && !key.endsWith('__ts') && !remoteKeys.has(key)) {
+          const value = localStorage.getItem(key);
+          if (value) supabaseSet(key, value);
+        }
+      }
+
+      if (updated > 0) {
+        console.log(`Synced ${updated} items from cloud`);
+        // Reload so the app picks up the synced data
+        setSyncStatus('synced');
+        syncDone = true;
+        window.location.reload();
+        return;
+      }
+
+      setSyncStatus('synced');
+      syncDone = true;
+    } catch (e) {
+      console.warn('Sync failed:', e.message);
+      setSyncStatus('error');
+    }
+  })();
+
+  // Timeout: if Supabase doesn't respond in 5s, proceed with local data
+  const timeout = new Promise(resolve => setTimeout(() => {
+    if (!syncDone) {
+      console.warn('Sync timed out — using local data');
+      setSyncStatus('offline');
+      syncDone = true;
+    }
+    resolve();
+  }, 5000));
+
+  return Promise.race([syncPromise, timeout]);
 }
 
-// --- Device migration: restore from Supabase if localStorage is empty ---
+// Kick off sync immediately on module load
+syncWithSupabase();
 
-let migrationDone = false;
-
-async function migrateFromSupabase() {
-  if (migrationDone || !supabase) return;
-  migrationDone = true;
-
-  // Check if localStorage already has CIT data
-  let hasLocalData = false;
-  for (let i = 0; i < localStorage.length; i++) {
-    if (localStorage.key(i)?.startsWith('cit-v4-')) {
-      hasLocalData = true;
-      break;
-    }
-  }
-  if (hasLocalData) return;
-
-  // localStorage is empty — try restoring from Supabase
-  try {
-    const { data, error } = await supabase
-      .from('cit_storage')
-      .select('key, value')
-      .like('key', 'cit-v4-%');
-    if (error || !data || data.length === 0) return;
-
-    for (const row of data) {
-      localStorage.setItem(row.key, row.value);
-    }
-    console.log(`Restored ${data.length} items from Supabase`);
-    // Reload so the app picks up the restored data
-    window.location.reload();
-  } catch (e) {
-    console.warn('Supabase migration failed:', e.message);
-  }
-}
-
-// Kick off migration immediately on module load
-migrateFromSupabase();
-
-// --- Storage adapter (same API as before) ---
+// --- Storage adapter ---
 
 const storage = {
   async get(key) {
+    // Wait for sync to complete (or timeout) before reading
+    await syncWithSupabase();
     try {
       const value = localStorage.getItem(key);
       if (value !== null) return { value };
 
-      // localStorage miss — try Supabase
+      // localStorage miss — try Supabase directly
       const remote = await supabaseGet(key);
       if (remote !== null) {
         localStorage.setItem(key, remote);
@@ -139,7 +207,7 @@ const storage = {
       const keys = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key && key.startsWith(prefix)) keys.push(key);
+        if (key && key.startsWith(prefix) && !key.endsWith('__ts')) keys.push(key);
       }
       return keys;
     } catch {
@@ -161,7 +229,7 @@ export async function exportBackup() {
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith('cit-v4-') && key !== 'cit-v4-config' && key !== 'cit-v4-welcomed') {
+      if (key && key.startsWith('cit-v4-') && !key.endsWith('__ts') && key !== 'cit-v4-config' && key !== 'cit-v4-welcomed') {
         data[key] = localStorage.getItem(key);
       }
     }
