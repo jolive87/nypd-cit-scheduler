@@ -25,7 +25,6 @@ function setSyncStatus(s) {
 function supabaseSet(key, value) {
   if (!supabase) return;
   const ts = new Date().toISOString();
-  // Store timestamp locally so we can compare on next load
   try { localStorage.setItem(`${key}__ts`, ts); } catch {}
   supabase
     .from('cit_storage')
@@ -33,6 +32,17 @@ function supabaseSet(key, value) {
     .then(({ error }) => {
       if (error) console.warn('Supabase write failed:', key, error.message);
     });
+}
+
+// Awaitable version — used during initial sync so we don't mark sync done before writes land
+async function supabaseSetAsync(key, value) {
+  if (!supabase) return;
+  const ts = new Date().toISOString();
+  try { localStorage.setItem(`${key}__ts`, ts); } catch {}
+  const { error } = await supabase
+    .from('cit_storage')
+    .upsert({ key, value, updated_at: ts }, { onConflict: 'key' });
+  if (error) console.warn('Supabase write failed:', key, error.message);
 }
 
 function supabaseDelete(key) {
@@ -88,17 +98,27 @@ function syncWithSupabase() {
         return;
       }
 
+      // Collect local keys upfront — supabaseSet mutates localStorage (adds __ts keys),
+      // so iterating by index during writes skips keys.
+      const localCitKeys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('cit-v4-') && !key.endsWith('__ts')) {
+          localCitKeys.push(key);
+        }
+      }
+
       if (!data || data.length === 0) {
         // No remote data — push local data up to Supabase as initial seed
-        let pushed = 0;
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith('cit-v4-') && !key.endsWith('__ts')) {
-            const value = localStorage.getItem(key);
-            if (value) { supabaseSet(key, value); pushed++; }
-          }
+        const pushPromises = [];
+        for (const key of localCitKeys) {
+          const value = localStorage.getItem(key);
+          if (value) pushPromises.push(supabaseSetAsync(key, value));
         }
-        if (pushed > 0) console.log(`Pushed ${pushed} local items to Supabase`);
+        if (pushPromises.length > 0) {
+          await Promise.allSettled(pushPromises);
+          console.log(`Pushed ${pushPromises.length} local items to Supabase`);
+        }
         setSyncStatus('synced');
         syncDone = true;
         return;
@@ -115,15 +135,17 @@ function syncWithSupabase() {
           localStorage.setItem(row.key, row.value);
           localStorage.setItem(`${row.key}__ts`, remoteTs);
           updated++;
+        } else if (localTs > remoteTs) {
+          // Local is newer — push it up to Supabase now
+          const value = localStorage.getItem(row.key);
+          if (value) supabaseSet(row.key, value);
         }
-        // If local is newer, it will be pushed on next write (already happening)
       }
 
       // Also push any local keys that don't exist in Supabase
       const remoteKeys = new Set(data.map(r => r.key));
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('cit-v4-') && !key.endsWith('__ts') && !remoteKeys.has(key)) {
+      for (const key of localCitKeys) {
+        if (!remoteKeys.has(key)) {
           const value = localStorage.getItem(key);
           if (value) supabaseSet(key, value);
         }
